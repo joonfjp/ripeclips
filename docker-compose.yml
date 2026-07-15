@@ -1,0 +1,47 @@
+# Top-level compose that brings up both the Parakeet ASR service (CPU) and the
+# highlightr highlights API together.
+#
+#   docker compose up --build
+services:
+  parakeet-cpu:
+    build:
+      context: ./parakeet
+      dockerfile: Dockerfile.cpu
+    image: parakeet-tdt:cpu
+    container_name: parakeet-cpu
+    environment:
+      PARAKEET_USE_GPU: "false"
+      PARAKEET_DEFAULT_MODEL: parakeet-tdt-0.6b-v3
+      PARAKEET_BATCHED: "0"
+    ports:
+      - "127.0.0.1:5092:5092"
+    volumes:
+      - parakeet-models:/app/models
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5092/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  highlightr-api:
+    build:
+      context: ./highlightr
+    image: ripeclips-highlightr:latest
+    container_name: highlightr-api
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      # OpenAI-compatible chat/completions endpoint used by the highlightr app. The base
+      # URL should end in /v1; the app posts to {LLM_BASE_URL}/chat/completions.
+      # Override as needed: LLM_BASE_URL=... LLM_MODEL=... docker compose up
+      LLM_BASE_URL: "${LLM_BASE_URL:-http://host.docker.internal:11434/v1}"
+      LLM_MODEL: "${LLM_MODEL:-gemma4}"
+      LLM_API_KEY: "${LLM_API_KEY:-}"
+    restart: unless-stopped
+
+volumes:
+  parakeet-models:
+    name: parakeet-models

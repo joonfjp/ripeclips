@@ -1,0 +1,1200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#111310" />
+    <title>RipeClips</title>
+    <script>
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem('ripe-clips-theme') || 'dark';
+      } catch {
+        document.documentElement.dataset.theme = 'dark';
+      }
+    </script>
+  </head>
+  <body>
+    <main class="app">
+      <header>
+        <div class="header-title">
+          <div class="header-title-text">
+            <div class="eyebrow">Local clip studio</div>
+            <h1><img id="app-logo" class="app-logo" src="/logo.png" alt="RipeClips logo" />RipeClips</h1>
+          </div>
+        </div>
+        <p>From vine to viral. Drop an MP4, get captioned clips of your best moments.</p>
+        <div class="header-actions">
+          <button id="tab-settings" class="settings-toggle" type="button" role="tab" aria-selected="false" aria-controls="panel-settings" aria-label="Settings">
+            <span class="settings-icon" aria-hidden="true">⚙</span>
+            <span class="settings-label">Settings</span>
+          </button>
+          <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to light mode">
+            <span class="theme-icon" aria-hidden="true">☀</span>
+            <span class="theme-label">Light</span>
+          </button>
+        </div>
+      </header>
+
+      <nav class="tabs" role="tablist" aria-label="Tools">
+        <button id="tab-clipit" class="tab tab-primary active" type="button" role="tab" aria-selected="true" aria-controls="panel-clipit">
+          <span class="tab-primary-spark" aria-hidden="true">✦</span>
+          Clip it
+        </button>
+
+        <span class="tab-divider" aria-hidden="true"></span>
+
+        <div class="tab-tools" role="group" aria-label="Manual tools">
+          <button id="tab-loop" class="tab tab-tool" type="button" role="tab" aria-selected="false" aria-controls="panel-loop">
+            Trim
+          </button>
+          <button id="tab-caption" class="tab tab-tool" type="button" role="tab" aria-selected="false" aria-controls="panel-caption">
+            Caption
+          </button>
+          <button id="tab-generate" class="tab tab-tool" type="button" role="tab" aria-selected="false" aria-controls="panel-generate">
+            Transcribe
+          </button>
+        </div>
+      </nav>
+
+      <p class="tool-description" id="tool-description" hidden></p>
+
+      <section class="workspace" id="panel-burn" role="tabpanel" aria-labelledby="tab-burn" hidden>
+        <aside class="controls">
+          <div class="studio-section" id="burn-source-section">
+          <div class="step step-with-action studio-section-head">
+            <span class="step-number">01</span>
+            <div>
+              <h2>Source files</h2>
+              <p>Drop or choose one MP4 and one SRT.</p>
+            </div>
+            <button id="burn-clear-button" type="button" class="reset-button step-action" title="Clear everything and start over">Reset</button>
+            <button type="button" class="studio-section-toggle" aria-label="Collapse section" aria-expanded="true">
+              <span class="collapse-chevron" aria-hidden="true">▲</span>
+            </button>
+          </div>
+          <div class="studio-section-body">
+
+          <button id="video-button" class="file-drop" type="button">
+            <span class="file-kind">MP4</span>
+            <span>
+              <strong id="video-name">Choose a video</strong>
+              <small id="video-meta">No file selected</small>
+            </span>
+          </button>
+
+          <button id="srt-button" class="file-drop" type="button">
+            <span class="file-kind">SRT</span>
+            <span>
+              <strong id="srt-name">Choose subtitles</strong>
+              <small id="srt-meta">No file selected</small>
+            </span>
+          </button>
+          </div>
+          </div>
+
+          <div class="rule"></div>
+
+          <div class="step">
+            <span class="step-number">02</span>
+            <div>
+              <h2>Subtitle style</h2>
+              <p>Presets for outline, shadow, and boxed caption styles.</p>
+            </div>
+          </div>
+
+          <div class="subtitle-style" data-subtitle-style-prefix=""></div>
+
+        </aside>
+
+        <section class="preview-panel">
+          <div class="preview-heading">
+            <div>
+              <span class="label">Burn</span>
+              <span id="preview-status">Waiting for files</span>
+            </div>
+            <div class="preview-heading-actions">
+              <div class="music-mount" data-music-mount="burn"></div>
+            </div>
+          </div>
+
+          <div class="stage" id="stage">
+            <div class="empty-state" id="empty-state">
+              <div class="play-mark">▶</div>
+              <strong>Your clip appears here</strong>
+              <span>Drop an MP4 to begin.</span>
+            </div>
+            <video id="source-video" controls controlslist="nofullscreen" playsinline hidden></video>
+            <div id="subtitle-preview" class="subtitle-preview" aria-live="off"></div>
+            <button id="fullscreen-button" class="stage-fullscreen" type="button" title="Fullscreen preview" aria-label="Fullscreen preview" disabled>
+              ⛶
+            </button>
+          </div>
+
+          <div class="action-grid burn-preview-actions">
+            <button id="render-button" class="render-button" disabled>
+              <span>Render MP4</span>
+              <span aria-hidden="true">→</span>
+            </button>
+            <button id="reveal-button" class="download disabled" type="button" aria-disabled="true" disabled>
+              Show in Finder
+            </button>
+          </div>
+
+          <div class="generate-tracker" id="render-tracker" hidden>
+            <div class="generate-tracker-head">
+              <span class="identify-spinner" id="render-spinner" aria-hidden="true"></span>
+              <strong id="render-phase">Ready</strong>
+              <span class="identify-tracker-elapsed" id="render-elapsed">0:00</span>
+            </div>
+            <ol class="generate-stages" id="render-stages">
+              <li data-stage="prepare">
+                <span class="generate-stage-label">Prepare</span>
+                <span class="generate-stage-detail">Pick the destination and prepare the styled subtitles.</span>
+              </li>
+              <li data-stage="render">
+                <span class="generate-stage-label">Render MP4</span>
+                <span class="generate-stage-detail">Burn the captions into a new MP4 with FFmpeg.</span>
+              </li>
+              <li data-stage="done">
+                <span class="generate-stage-label">Done</span>
+                <span class="generate-stage-detail">Write the subtitled MP4 where you chose.</span>
+              </li>
+            </ol>
+            <div class="progress-track"><div id="progress-bar"></div></div>
+            <p id="status" role="status">Ready</p>
+          </div>
+
+        </section>
+      </section>
+
+      <section class="workspace loop-workspace" id="panel-loop" role="tabpanel" aria-labelledby="tab-loop" hidden>
+        <aside class="controls">
+          <div class="step step-with-action">
+            <span class="step-number">01</span>
+            <div>
+              <h2>Source video</h2>
+              <p>Drop or choose an MP4 to trim and reframe.</p>
+            </div>
+            <button id="loop-clear-button" type="button" class="reset-button step-action" title="Clear everything and start over">Reset</button>
+          </div>
+
+          <button id="loop-video-button" class="file-drop" type="button">
+            <span class="file-kind">MP4</span>
+            <span>
+              <strong id="loop-video-name">Choose a video</strong>
+              <small id="loop-video-meta">No file selected</small>
+            </span>
+          </button>
+
+          <div class="rule"></div>
+
+          <div class="loop-export" id="loop-export-section">
+            <div class="step">
+              <span class="step-number">02</span>
+              <div>
+                <h2>Export</h2>
+                <p>Save the selected range as a new MP4.</p>
+              </div>
+            </div>
+
+            <fieldset class="reframe-modes loop-format" id="loop-format-field">
+              <legend class="sr-only">Output format</legend>
+              <label class="reframe-mode">
+                <input type="radio" name="loop-format" value="original" checked />
+                <span>
+                  <strong>Original</strong>
+                  <small>Keep the source aspect ratio.</small>
+                </span>
+              </label>
+              <label class="reframe-mode">
+                <input type="radio" name="loop-format" value="portrait" />
+                <span>
+                  <strong>Portrait 9:16</strong>
+                  <small>Vertical for Shorts, Reels, and TikTok.</small>
+                </span>
+              </label>
+            </fieldset>
+
+            <fieldset class="reframe-modes loop-bg" id="loop-bg-field" hidden>
+              <legend class="sr-only">Portrait background</legend>
+              <label class="reframe-mode">
+                <input type="radio" name="loop-bg" value="blur" checked />
+                <span>
+                  <strong>Blurred fill</strong>
+                  <small>Enlarged, blurred copy of the frame behind it.</small>
+                </span>
+              </label>
+              <label class="reframe-mode">
+                <input type="radio" name="loop-bg" value="black" />
+                <span>
+                  <strong>Black bars</strong>
+                  <small>Solid black above and below.</small>
+                </span>
+              </label>
+            </fieldset>
+
+            <div class="action-grid">
+              <button id="loop-save-button" class="render-button" disabled>
+                <span>Save selection</span>
+                <span aria-hidden="true">→</span>
+              </button>
+              <button id="loop-reveal-button" class="download disabled" type="button" aria-disabled="true" disabled>
+                Show in Finder
+              </button>
+            </div>
+
+            <div class="generate-tracker" id="loop-progress-wrap" hidden>
+              <div class="generate-tracker-head">
+                <span class="identify-spinner" id="loop-progress-spinner" aria-hidden="true"></span>
+                <strong id="loop-progress-phase">Ready</strong>
+                <span class="identify-tracker-elapsed" id="loop-progress-elapsed">0:00</span>
+              </div>
+              <ol class="generate-stages" id="loop-progress-stages">
+                <li data-stage="prepare">
+                  <span class="generate-stage-label">Prepare</span>
+                  <span class="generate-stage-detail">Pick the destination and prepare the selected range.</span>
+                </li>
+                <li data-stage="render">
+                  <span class="generate-stage-label">Render MP4</span>
+                  <span class="generate-stage-detail">Trim, reframe, and encode the clip with FFmpeg.</span>
+                </li>
+                <li data-stage="done">
+                  <span class="generate-stage-label">Done</span>
+                  <span class="generate-stage-detail">Write the exported MP4 where you chose.</span>
+                </li>
+              </ol>
+              <div class="progress-track"><div id="loop-progress-bar"></div></div>
+              <p id="loop-progress-status" role="status">Ready</p>
+            </div>
+          </div>
+        </aside>
+
+        <section class="preview-panel">
+          <div class="preview-heading">
+            <div>
+              <span class="label">Edit</span>
+              <span id="loop-status">Waiting for a clip</span>
+            </div>
+            <div class="preview-heading-actions">
+              <div class="music-mount" data-music-mount="loop"></div>
+            </div>
+          </div>
+
+          <div class="stage loop-stage">
+            <button class="empty-state stage-drop" id="loop-empty-state" type="button">
+              <div class="play-mark">▶</div>
+              <strong>Your clip appears here</strong>
+              <span>Drop an MP4 to begin.</span>
+            </button>
+            <!-- Portrait 9:16 preview frame: black bars by default, or a muted,
+                 blurred copy of the clip when "Blurred fill" is selected. This
+                 is preview-only; the real reframe happens in ffmpeg on export. -->
+            <div id="loop-portrait-frame" class="portrait-frame" aria-hidden="true" hidden>
+              <video id="loop-video-bg" class="portrait-bg" muted playsinline tabindex="-1"></video>
+            </div>
+            <video id="loop-video" controls controlslist="nofullscreen" playsinline hidden></video>
+          </div>
+
+          <div class="loop-timeline-area" id="loop-timeline-area">
+            <div class="loop-toolbar">
+              <div class="loop-zoom">
+                <button id="loop-zoom-out" class="loop-zoom-btn" type="button" title="Zoom out" aria-label="Zoom out">−</button>
+                <button id="loop-zoom-in" class="loop-zoom-btn" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+                <span id="loop-zoom-level" class="loop-zoom-level">1×</span>
+              </div>
+              <div class="loop-zoom">
+                <button id="loop-zoom-sel" class="loop-zoom-btn wide" type="button">Fit selection</button>
+                <button id="loop-zoom-all" class="loop-zoom-btn wide" type="button">Fit all</button>
+              </div>
+            </div>
+
+            <div id="loop-ruler" class="loop-ruler"></div>
+
+            <div class="loop-timeline-row">
+              <div id="loop-timeline" class="loop-timeline">
+                <div id="loop-grid" class="loop-grid"></div>
+                <div id="loop-range" class="loop-range"></div>
+                <div id="loop-playhead" class="loop-playhead"></div>
+                <button id="loop-handle-start" class="loop-handle loop-handle-start" type="button" aria-label="Loop start"></button>
+                <button id="loop-handle-end" class="loop-handle loop-handle-end" type="button" aria-label="Loop end"></button>
+                <div id="loop-hover" class="loop-hover" hidden></div>
+              </div>
+              <div id="loop-zoom-slider" class="loop-vscroll" role="slider" aria-label="Timeline zoom" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+                <div class="loop-vscroll-thumb"></div>
+              </div>
+            </div>
+
+            <div class="loop-overview-wrap">
+              <span class="loop-overview-label">Overview</span>
+              <div id="loop-overview" class="loop-overview">
+                <div id="loop-overview-clips" class="loop-overview-clips"></div>
+                <div id="loop-overview-range" class="loop-overview-range"></div>
+                <div id="loop-overview-playhead" class="loop-overview-playhead"></div>
+                <div id="loop-overview-view" class="loop-overview-view">
+                  <span class="loop-overview-grip"></span>
+                  <span class="loop-overview-grip"></span>
+                </div>
+              </div>
+              <div id="loop-overview-slider" class="loop-vscroll loop-vscroll-sm" role="slider" aria-label="Overview zoom" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+                <div class="loop-vscroll-thumb"></div>
+              </div>
+            </div>
+
+            <div class="loop-range-controls">
+              <div class="loop-fields">
+                <label class="loop-field">
+                  <span>Start</span>
+                  <input id="loop-start-input" type="text" inputmode="decimal" spellcheck="false" value="0:00.000" />
+                </label>
+                <label class="loop-field">
+                  <span>End</span>
+                  <input id="loop-end-input" type="text" inputmode="decimal" spellcheck="false" value="0:00.000" />
+                </label>
+                <div class="loop-field">
+                  <span>Clip</span>
+                  <output id="loop-duration">0:00.000</output>
+                </div>
+              </div>
+
+              <div class="loop-range-actions">
+                <label class="toggle-field">
+                  <input id="loop-enabled" type="checkbox" checked />
+                  <span>Loop within range</span>
+                </label>
+                <button id="loop-reset" type="button" class="reset-button">Reset range to full clip</button>
+              </div>
+            </div>
+
+          </div>
+        </section>
+      </section>
+
+      <section class="workspace loop-workspace" id="panel-clipit" role="tabpanel" aria-labelledby="tab-clipit">
+        <aside class="controls">
+          <div class="studio-section" id="clipit-source-section">
+          <div class="step step-with-action studio-section-head">
+            <span class="step-number">01</span>
+            <div>
+              <h2>Source files</h2>
+              <p>Drop or choose an MP4. Add an SRT to skip transcription.</p>
+            </div>
+            <button id="clipit-clear-button" type="button" class="reset-button step-action" title="Clear everything and start over">Reset</button>
+            <button type="button" class="studio-section-toggle" aria-label="Collapse section" aria-expanded="true">
+              <span class="collapse-chevron" aria-hidden="true">▲</span>
+            </button>
+          </div>
+          <div class="studio-section-body">
+
+          <button id="clipit-video-button" class="file-drop" type="button">
+            <span class="file-kind">MP4</span>
+            <span>
+              <strong id="clipit-video-name">Choose a video</strong>
+              <small id="clipit-video-meta">No file selected</small>
+            </span>
+          </button>
+
+          <button id="clipit-srt-button" class="file-drop optional" type="button">
+            <span class="file-kind">SRT</span>
+            <span>
+              <strong id="clipit-srt-name">Optional subtitles</strong>
+              <small id="clipit-srt-meta">Auto-generated if not provided</small>
+            </span>
+          </button>
+          </div>
+          </div>
+
+          <div class="rule"></div>
+
+          <div class="studio-section" id="clipit-identify-section">
+          <div class="step studio-section-head">
+            <span class="step-number">02</span>
+            <div>
+              <h2>Identify clips</h2>
+              <p>Generate the transcript (or use your SRT), find highlights, then refine and export.</p>
+            </div>
+            <button type="button" class="studio-section-toggle" aria-label="Collapse section" aria-expanded="true">
+              <span class="collapse-chevron" aria-hidden="true">▲</span>
+            </button>
+          </div>
+          <div class="studio-section-body">
+
+          <details class="loop-identify-settings" id="clipit-identify-settings">
+            <summary>Identify settings</summary>
+
+            <label class="identify-field" title="Free-form instruction describing what kind of clips to select (sent to the LLM). Leave blank to use the backend's default target." hidden>
+              <span>Target</span>
+              <input id="clipit-id-target" type="text" placeholder="Viral clips for TikTok and YouTube Shorts" spellcheck="false" />
+            </label>
+
+            <label class="identify-field" title="Free-form style preference for the selected clips, e.g. 'practical, surprising, self-contained'. Leave blank for no style hint.">
+              <span>Style</span>
+              <textarea id="clipit-id-style" rows="2" placeholder="practical, surprising, self-contained" spellcheck="false"></textarea>
+            </label>
+
+            <label class="identify-field" title="Comma-separated topics to focus clip selection on, e.g. 'AI strategy, pricing'. Leave blank to let the model pick freely.">
+              <span>Topics</span>
+              <textarea id="clipit-id-topics" rows="2" placeholder="AI strategy, pricing" spellcheck="false"></textarea>
+            </label>
+
+            <label class="identify-field" title="Preset bundle that sets topic strictness and per-window coverage. Controls how strictly topics are enforced (topic_policy), how high the admission bar is (admission_strictness), and whether every window must yield at least one candidate (min_candidates_per_window).">
+              <span>Discovery mode</span>
+              <select id="clipit-id-discovery-mode">
+                <option value="">None (backend default)</option>
+                <option value="best_only">best_only — only the strongest clips</option>
+                <option value="topic_focused">topic_focused — prefer topic matches</option>
+                <option value="topic_only">topic_only — topic matches only</option>
+                <option value="coverage">coverage — broad, lenient bar</option>
+                <option value="research_sweep">research_sweep — widest sweep</option>
+              </select>
+            </label>
+
+            <p id="clipit-id-preset-hint" class="identify-hint" hidden></p>
+
+            <label class="range-field" title="Shortest clip the backend will return, in seconds. Candidate clips shorter than this are discarded. Default: 15s.">
+              <span>Min duration <output id="clipit-id-min-duration-output">15s</output></span>
+              <input id="clipit-id-min-duration" type="range" min="5" max="600" step="5" value="15" />
+            </label>
+
+            <label class="range-field" title="Longest clip the backend will return, in seconds. Candidate clips longer than this are discarded. Default: 60s.">
+              <span>Max duration <output id="clipit-id-max-duration-output">60s</output></span>
+              <input id="clipit-id-max-duration" type="range" min="30" max="1800" step="30" value="60" />
+            </label>
+
+            <div class="field-grid">
+              <label title="Maximum number of clips to return. Leave blank to return all non-overlapping clips (the default).">
+                <span>Max clips</span>
+                <input id="clipit-id-max-clips" type="number" min="1" step="1" placeholder="All" />
+              </label>
+              <label title="How many candidate clips the LLM proposes per discovery window before ranking and de-duplication. Higher means more thorough but more work. Default: 3.">
+                <span>Candidates / window</span>
+                <input id="clipit-id-candidates" type="number" min="1" step="1" value="3" />
+              </label>
+            </div>
+
+            <div class="field-grid">
+              <label title="Length, in seconds, of each sliding window the transcript is scanned in. The LLM looks at one window of this size at a time. Leave blank to let the backend choose automatically.">
+                <span>Window (s)</span>
+                <input id="clipit-id-window" type="number" min="1" step="1" placeholder="Auto" />
+              </label>
+              <label title="How far, in seconds, each window advances before the next scan. Smaller than the window means overlapping scans (more thorough, more LLM calls); equal to the window means no overlap. Leave blank for the backend default.">
+                <span>Stride (s)</span>
+                <input id="clipit-id-stride" type="number" min="1" step="1" placeholder="Auto" />
+              </label>
+            </div>
+
+            <label class="toggle-field" title="When off (default), the SRT is submitted as an async job that is polled until it completes — best for full episodes. When on, it uses the synchronous endpoint, which blocks until done and is only suitable for tiny smoke tests." hidden>
+              <input id="clipit-id-sync" type="checkbox" />
+              <span>Synchronous request</span>
+            </label>
+
+            <label class="identify-field" title="Base URL of the Highlights 2.0 API. Endpoints are derived from this. Default: http://127.0.0.1:8000.">
+              <span>API base URL</span>
+              <input id="clipit-id-base-url" type="text" value="http://127.0.0.1:8000" spellcheck="false" />
+            </label>
+
+            <button id="clipit-id-reset" type="button" class="reset-button">Reset knobs to defaults</button>
+            <button id="clipit-id-collapse" type="button" class="collapse-button">
+              <span class="collapse-chevron" aria-hidden="true">▲</span>
+              Collapse options
+            </button>
+          </details>
+
+          <button id="clipit-identify-button" class="render-button loop-generate" type="button" disabled>
+            <span>Identify clips</span>
+            <span aria-hidden="true">✦</span>
+          </button>
+
+          <div class="identify-tracker" id="clipit-identify-tracker" hidden>
+            <div class="identify-tracker-head">
+              <span class="identify-spinner" id="clipit-identify-spinner" aria-hidden="true"></span>
+              <strong id="clipit-identify-phase">Ready</strong>
+              <span class="identify-tracker-elapsed" id="clipit-identify-elapsed">0:00</span>
+            </div>
+            <ol class="identify-stages" id="clipit-identify-stages">
+              <li data-stage="transcribe">Transcribe</li>
+              <li data-stage="submit">Submit</li>
+              <li data-stage="queue">Queue</li>
+              <li data-stage="process">Process</li>
+              <li data-stage="done">Done</li>
+            </ol>
+            <div class="progress-track"><div id="clipit-identify-progress-bar"></div></div>
+            <p id="clipit-identify-status" role="status">Ready</p>
+            <p class="identify-windows" id="clipit-identify-windows" hidden></p>
+          </div>
+          </div>
+          </div>
+
+          <div class="rule" id="clipit-export-rule"></div>
+
+          <div class="studio-section loop-export" id="clipit-export-section">
+            <div class="step">
+              <span class="step-number">03</span>
+              <div>
+                <h2>Export clip</h2>
+                <p>Save the selected clip as its own MP4 with optional captions and format settings.</p>
+              </div>
+            </div>
+
+            <fieldset class="reframe-modes loop-format" id="clipit-format-field">
+              <legend class="sr-only">Output format</legend>
+              <label class="reframe-mode">
+                <input type="radio" name="clipit-format" value="original" checked />
+                <span>
+                  <strong>Original</strong>
+                  <small>Keep the source aspect ratio.</small>
+                </span>
+              </label>
+              <label class="reframe-mode">
+                <input type="radio" name="clipit-format" value="portrait" />
+                <span>
+                  <strong>Portrait 9:16</strong>
+                  <small>Vertical for Shorts, Reels, and TikTok.</small>
+                </span>
+              </label>
+            </fieldset>
+
+            <fieldset class="reframe-modes loop-bg" id="clipit-bg-field" hidden>
+              <legend class="sr-only">Portrait background</legend>
+              <label class="reframe-mode">
+                <input type="radio" name="clipit-bg" value="blur" checked />
+                <span>
+                  <strong>Blurred fill</strong>
+                  <small>Enlarged, blurred copy of the frame behind it.</small>
+                </span>
+              </label>
+              <label class="reframe-mode">
+                <input type="radio" name="clipit-bg" value="black" />
+                <span>
+                  <strong>Black bars</strong>
+                  <small>Solid black above and below.</small>
+                </span>
+              </label>
+            </fieldset>
+
+            <!-- Captioning: a top-level export option alongside the format
+                 pickers above. The toggle turns burn-in on/off; its body holds
+                 transcription + subtitle-style controls. IDs are unchanged so
+                 studio.js wiring still applies. -->
+            <div class="caption-config" id="clipit-caption-section">
+              <label class="caption-config-switch" title="Burn captions into the exported clip">
+                <input id="clipit-caption-toggle" type="checkbox" checked />
+                <span class="section-switch-track" aria-hidden="true"></span>
+                <span class="caption-config-label">Captions</span>
+              </label>
+
+              <div class="caption-config-body" id="clipit-caption-body">
+                <details class="loop-identify-settings" id="clipit-caption-style-settings">
+                  <summary>Subtitle style</summary>
+                  <div class="subtitle-style" data-subtitle-style-prefix="clipit-caption-"></div>
+                </details>
+
+                <details class="loop-identify-settings" id="clipit-transcribe-settings">
+                  <summary>Transcription settings</summary>
+                  <p class="identify-hint">Controls how transcribed words are grouped into caption cues.</p>
+                  <p class="settings-render-note">Applied on export only — changes here won't update the live preview.</p>
+
+                  <label class="range-field" title="Longest a single cue may span before a new one is started.">
+                    <span>Max duration <output id="clipit-caption-max-duration-output">4.0s</output></span>
+                    <input id="clipit-caption-max-duration" type="range" min="1" max="10" step="0.5" value="4" />
+                  </label>
+
+                  <div class="field-grid">
+                    <label title="Maximum words on a single line within a cue.">
+                      <span>Max words / line</span>
+                      <input id="clipit-caption-max-words" type="number" min="1" step="1" value="4" />
+                    </label>
+                    <label title="Maximum number of lines (rows) per cue.">
+                      <span>Rows</span>
+                      <input id="clipit-caption-rows" type="number" min="1" step="1" value="1" />
+                    </label>
+                  </div>
+
+                  <label class="identify-field" title="A silent gap (seconds) at least this long forces a new cue.">
+                    <span>Pause (seconds)</span>
+                    <input id="clipit-caption-pause" type="number" min="0" step="0.1" value="0.6" />
+                  </label>
+
+                  <label class="identify-field" title="Base URL of the local Parakeet transcription server.">
+                    <span>API base URL</span>
+                    <input id="clipit-caption-base-url" type="text" value="http://localhost:5092" spellcheck="false" />
+                  </label>
+
+                  <label class="identify-field" title="Transcription model name passed to the endpoint.">
+                    <span>Model</span>
+                    <input id="clipit-caption-model" type="text" value="parakeet-tdt-0.6b-v3" spellcheck="false" />
+                  </label>
+
+                  <button id="clipit-caption-transcribe-reset" type="button" class="reset-button">Reset transcription knobs</button>
+                </details>
+              </div>
+            </div>
+
+            <div class="generate-tracker" id="clipit-progress-wrap" hidden>
+              <div class="generate-tracker-head">
+                <span class="identify-spinner" id="clipit-progress-spinner" aria-hidden="true"></span>
+                <strong id="clipit-progress-phase">Ready</strong>
+                <span class="identify-tracker-elapsed" id="clipit-progress-elapsed">0:00</span>
+              </div>
+              <ol class="generate-stages" id="clipit-progress-stages">
+                <li data-stage="prepare">
+                  <span class="generate-stage-label">Prepare</span>
+                  <span class="generate-stage-detail">Pick the destination and prepare the selected range.</span>
+                </li>
+                <li data-stage="render">
+                  <span class="generate-stage-label">Render MP4</span>
+                  <span class="generate-stage-detail">Trim, reframe, and encode the clip with FFmpeg.</span>
+                </li>
+                <li data-stage="done">
+                  <span class="generate-stage-label">Done</span>
+                  <span class="generate-stage-detail">Write the exported MP4 where you chose.</span>
+                </li>
+              </ol>
+              <div class="progress-track"><div id="clipit-progress-bar"></div></div>
+              <p id="clipit-progress-status" role="status">Ready</p>
+            </div>
+
+            <div class="action-grid">
+              <button id="clipit-save-button" class="render-button" disabled>
+                <span>Save selection</span>
+                <span aria-hidden="true">→</span>
+              </button>
+              <button id="clipit-reveal-button" class="download disabled" type="button" aria-disabled="true" disabled>
+                Show in Finder
+              </button>
+            </div>
+          </div>
+
+          <!-- "Generate all clips" batch export: hidden from the UI for now,
+               kept in the DOM so its logic stays wired (see studio.js). -->
+          <div class="rule" id="clipit-generate-rule" hidden></div>
+
+          <div class="studio-section" id="clipit-generate-section" hidden>
+          <div class="step">
+            <span class="step-number">05</span>
+            <div>
+              <h2>Generate clips</h2>
+              <p>Export every detected clip to its own MP4.</p>
+            </div>
+          </div>
+
+          <button id="clipit-generate-button" class="render-button loop-generate" type="button" disabled>
+            <span>Generate all clips</span>
+            <span aria-hidden="true">✦</span>
+          </button>
+
+          <div class="generate-tracker" id="clipit-generate-progress-wrap" hidden>
+            <div class="generate-tracker-head">
+              <span class="identify-spinner" id="clipit-generate-spinner" aria-hidden="true"></span>
+              <strong id="clipit-generate-phase">Ready</strong>
+              <span class="identify-tracker-elapsed" id="clipit-generate-elapsed">0:00</span>
+            </div>
+            <ol class="generate-stages" id="clipit-generate-stages">
+              <li data-stage="prepare">
+                <span class="generate-stage-label">Prepare export</span>
+                <span class="generate-stage-detail">Choose the destination and prepare the detected clips.</span>
+              </li>
+              <li data-stage="generate">
+                <span class="generate-stage-label">Generate clips</span>
+                <span class="generate-stage-detail">Trim, reframe, and write each clip as its own MP4.</span>
+              </li>
+              <li data-stage="done">
+                <span class="generate-stage-label">Done</span>
+                <span class="generate-stage-detail">Finish the batch and reveal the exported clips.</span>
+              </li>
+            </ol>
+            <div class="progress-track"><div id="clipit-generate-progress-bar"></div></div>
+            <p id="clipit-generate-status" role="status">Ready</p>
+          </div>
+
+          <button id="clipit-generate-reveal-button" class="reset-button" type="button" hidden>
+            Show clips in Finder
+          </button>
+          </div>
+        </aside>
+
+        <section class="preview-panel">
+          <div class="preview-heading">
+            <div>
+              <span class="label">Clip it</span>
+              <span id="clipit-status">Waiting for a clip</span>
+            </div>
+            <div class="preview-heading-actions">
+              <button id="clipit-transcript-toggle" class="transcript-toggle" type="button" aria-pressed="false" title="Show clip transcript" hidden>
+                <span class="transcript-toggle-icon" aria-hidden="true">≡</span>
+                <span>Transcript</span>
+              </button>
+              <div class="music-mount" data-music-mount="clipit"></div>
+            </div>
+          </div>
+
+          <div class="stage loop-stage">
+            <div class="empty-state" id="clipit-empty-state">
+              <div class="play-mark">▶</div>
+              <strong>Your clip appears here</strong>
+              <span>Drop an MP4 to begin.</span>
+            </div>
+            <!-- Portrait 9:16 preview frame: black bars by default, or a muted,
+                 blurred copy of the clip when "Blurred fill" is selected. This
+                 is preview-only; the real reframe happens in ffmpeg on export. -->
+            <div id="clipit-portrait-frame" class="portrait-frame" aria-hidden="true" hidden>
+              <video id="clipit-video-bg" class="portrait-bg" muted playsinline tabindex="-1"></video>
+            </div>
+            <video id="clipit-video" controls controlslist="nofullscreen" playsinline hidden></video>
+            <div id="clipit-subtitle-preview" class="subtitle-preview" aria-live="off"></div>
+            <div id="clipit-transcript-panel" class="transcript-panel" role="region" aria-label="Clip transcript" hidden></div>
+          </div>
+
+          <div class="loop-timeline-area" id="clipit-timeline-area">
+            <div class="loop-toolbar">
+              <div class="loop-zoom">
+                <button id="clipit-zoom-out" class="loop-zoom-btn" type="button" title="Zoom out" aria-label="Zoom out">−</button>
+                <button id="clipit-zoom-in" class="loop-zoom-btn" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+                <span id="clipit-zoom-level" class="loop-zoom-level">1×</span>
+              </div>
+              <div class="loop-zoom">
+                <button id="clipit-zoom-sel" class="loop-zoom-btn wide" type="button">Fit selection</button>
+                <button id="clipit-zoom-all" class="loop-zoom-btn wide" type="button">Fit all</button>
+              </div>
+            </div>
+
+            <div id="clipit-ruler" class="loop-ruler"></div>
+
+            <div class="loop-timeline-row">
+              <div id="clipit-timeline" class="loop-timeline">
+                <div id="clipit-grid" class="loop-grid"></div>
+                <div id="clipit-range" class="loop-range"></div>
+                <div id="clipit-playhead" class="loop-playhead"></div>
+                <button id="clipit-handle-start" class="loop-handle loop-handle-start" type="button" aria-label="Loop start"></button>
+                <button id="clipit-handle-end" class="loop-handle loop-handle-end" type="button" aria-label="Loop end"></button>
+                <div id="clipit-hover" class="loop-hover" hidden></div>
+              </div>
+              <div id="clipit-zoom-slider" class="loop-vscroll" role="slider" aria-label="Timeline zoom" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+                <div class="loop-vscroll-thumb"></div>
+              </div>
+            </div>
+
+            <div class="loop-overview-wrap">
+              <span class="loop-overview-label">Overview</span>
+              <div id="clipit-overview" class="loop-overview">
+                <div id="clipit-overview-clips" class="loop-overview-clips"></div>
+                <div id="clipit-overview-range" class="loop-overview-range"></div>
+                <div id="clipit-overview-playhead" class="loop-overview-playhead"></div>
+                <div id="clipit-overview-view" class="loop-overview-view">
+                  <span class="loop-overview-grip"></span>
+                  <span class="loop-overview-grip"></span>
+                </div>
+              </div>
+              <div id="clipit-overview-slider" class="loop-vscroll loop-vscroll-sm" role="slider" aria-label="Overview zoom" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+                <div class="loop-vscroll-thumb"></div>
+              </div>
+            </div>
+
+            <div class="loop-range-controls">
+              <div class="loop-fields">
+                <label class="loop-field">
+                  <span>Start</span>
+                  <input id="clipit-start-input" type="text" inputmode="decimal" spellcheck="false" value="0:00.000" />
+                </label>
+                <label class="loop-field">
+                  <span>End</span>
+                  <input id="clipit-end-input" type="text" inputmode="decimal" spellcheck="false" value="0:00.000" />
+                </label>
+                <div class="loop-field">
+                  <span>Clip</span>
+                  <output id="clipit-duration">0:00.000</output>
+                </div>
+              </div>
+
+              <div class="loop-range-actions">
+                <label class="toggle-field">
+                  <input id="clipit-enabled" type="checkbox" checked />
+                  <span>Loop within range</span>
+                </label>
+                <button id="clipit-reset" type="button" class="reset-button">Reset range to full clip</button>
+              </div>
+
+              <div id="clipit-clip-edit" class="loop-clip-edit" hidden>
+                <div class="loop-clip-edit-head">
+                  <span class="loop-clip-edit-label">Editing</span>
+                  <strong id="clipit-clip-edit-title"></strong>
+                </div>
+                <p id="clipit-clip-edit-delta" class="loop-clip-edit-delta"></p>
+                <button id="clipit-clip-save" class="loop-clip-save" type="button" disabled>Save &amp; overwrite clip</button>
+                <button id="clipit-clip-revert" class="loop-clip-revert" type="button" disabled>Revert to original</button>
+              </div>
+            </div>
+
+            <div class="rule" id="clipit-clips-rule" hidden></div>
+
+            <div class="clipit-clips-block" id="clipit-clips-block" hidden>
+              <p id="clipit-clips-summary" class="clips-summary" hidden></p>
+              <div id="clipit-clips" class="loop-clips" role="region" aria-label="Identified clips" tabindex="0"></div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+
+      <section class="workspace" id="panel-caption" role="tabpanel" aria-labelledby="tab-caption" hidden>
+        <aside class="controls">
+          <div class="studio-section" id="caption-source-section">
+          <div class="step step-with-action studio-section-head">
+            <span class="step-number">01</span>
+            <div>
+              <h2>Source files</h2>
+              <p>Drop or choose an MP4. Add an SRT to skip transcription.</p>
+            </div>
+            <button id="caption-clear-button" type="button" class="reset-button step-action" title="Clear everything and start over">Reset</button>
+            <button type="button" class="studio-section-toggle" aria-label="Collapse section" aria-expanded="true">
+              <span class="collapse-chevron" aria-hidden="true">▲</span>
+            </button>
+          </div>
+          <div class="studio-section-body">
+
+          <button id="caption-video-button" class="file-drop" type="button">
+            <span class="file-kind">MP4</span>
+            <span>
+              <strong id="caption-video-name">Choose a video</strong>
+              <small id="caption-video-meta">No file selected</small>
+            </span>
+          </button>
+
+          <button id="caption-srt-button" class="file-drop optional" type="button">
+            <span class="file-kind">SRT</span>
+            <span>
+              <strong id="caption-srt-name">Optional subtitles</strong>
+              <small id="caption-srt-meta">Auto-generated on run if not provided</small>
+            </span>
+          </button>
+          <button id="caption-srt-clear" type="button" class="reset-button" hidden>Clear SRT (transcribe instead)</button>
+          </div>
+          </div>
+
+          <details class="loop-identify-settings" id="caption-transcribe-settings">
+            <summary>Transcription settings</summary>
+            <p class="identify-hint">Used only when no SRT is supplied.</p>
+
+            <label class="range-field" title="Longest a single cue may span before a new one is started.">
+              <span>Max duration <output id="caption-max-duration-output">4.0s</output></span>
+              <input id="caption-max-duration" type="range" min="1" max="10" step="0.5" value="4" />
+            </label>
+
+            <div class="field-grid">
+              <label title="Maximum words on a single line within a cue.">
+                <span>Max words / line</span>
+                <input id="caption-max-words" type="number" min="1" step="1" value="6" />
+              </label>
+              <label title="Maximum number of lines (rows) per cue.">
+                <span>Rows</span>
+                <input id="caption-rows" type="number" min="1" step="1" value="2" />
+              </label>
+            </div>
+
+            <label class="identify-field" title="A silent gap (seconds) at least this long forces a new cue.">
+              <span>Pause (seconds)</span>
+              <input id="caption-pause" type="number" min="0" step="0.1" value="0.6" />
+            </label>
+
+            <label class="identify-field" title="Base URL of the local Parakeet transcription server.">
+              <span>API base URL</span>
+              <input id="caption-base-url" type="text" value="http://localhost:5092" spellcheck="false" />
+            </label>
+
+            <label class="identify-field" title="Transcription model name passed to the endpoint.">
+              <span>Model</span>
+              <input id="caption-model" type="text" value="parakeet-tdt-0.6b-v3" spellcheck="false" />
+            </label>
+
+            <button id="caption-transcribe-reset" type="button" class="reset-button">Reset transcription knobs</button>
+            <button id="caption-transcribe-collapse" type="button" class="collapse-button">
+              <span class="collapse-chevron" aria-hidden="true">▲</span>
+              Collapse options
+            </button>
+          </details>
+
+          <div class="rule"></div>
+
+          <div class="step">
+            <span class="step-number">02</span>
+            <div>
+              <h2>Subtitle style</h2>
+              <p>How the burned-in captions look.</p>
+            </div>
+          </div>
+
+          <div class="subtitle-style" data-subtitle-style-prefix="caption-"></div>
+        </aside>
+
+        <section class="preview-panel">
+          <div class="preview-heading">
+            <div>
+              <span class="label">Caption</span>
+              <span id="caption-preview-status">Waiting for a video</span>
+            </div>
+            <div class="preview-heading-actions">
+              <div class="music-mount" data-music-mount="caption"></div>
+            </div>
+          </div>
+
+          <div class="stage" id="caption-stage">
+            <div class="empty-state" id="caption-empty-state">
+              <div class="play-mark">▶</div>
+              <strong>Your clip appears here</strong>
+              <span>Drop an MP4 to begin.</span>
+            </div>
+            <video id="caption-video" controls controlslist="nofullscreen" playsinline hidden></video>
+            <div id="caption-subtitle-preview" class="subtitle-preview" aria-live="off"></div>
+            <button id="caption-fullscreen-button" class="stage-fullscreen" type="button" title="Fullscreen preview" aria-label="Fullscreen preview" disabled>
+              ⛶
+            </button>
+          </div>
+
+          <div class="action-grid burn-preview-actions">
+            <button id="caption-run-button" class="render-button" disabled>
+              <span>Render MP4</span>
+              <span aria-hidden="true">→</span>
+            </button>
+            <button id="caption-reveal-button" class="download disabled" type="button" aria-disabled="true" disabled>
+              Show in Finder
+            </button>
+          </div>
+
+          <button id="caption-save-srt-button" class="reset-button" type="button" hidden>
+            Save generated SRT…
+          </button>
+
+          <div class="generate-tracker" id="caption-tracker" hidden>
+            <div class="generate-tracker-head">
+              <span class="identify-spinner" id="caption-spinner" aria-hidden="true"></span>
+              <strong id="caption-phase">Ready</strong>
+              <span class="identify-tracker-elapsed" id="caption-elapsed">0:00</span>
+            </div>
+            <ol class="generate-stages" id="caption-stages">
+              <li data-stage="transcribe">
+                <span class="generate-stage-label">Transcribe</span>
+                <span class="generate-stage-detail">Extract audio and transcribe it locally into cues.</span>
+              </li>
+              <li data-stage="burn">
+                <span class="generate-stage-label">Burn captions</span>
+                <span class="generate-stage-detail">Render the styled subtitles into a new MP4 with FFmpeg.</span>
+              </li>
+              <li data-stage="done">
+                <span class="generate-stage-label">Done</span>
+                <span class="generate-stage-detail">Write the captioned MP4 where you chose.</span>
+              </li>
+            </ol>
+            <div class="progress-track"><div id="caption-progress-bar"></div></div>
+            <p id="caption-status" role="status">Ready</p>
+          </div>
+        </section>
+      </section>
+
+
+      <section class="workspace" id="panel-generate" role="tabpanel" aria-labelledby="tab-generate" hidden>
+        <aside class="controls">
+          <div class="step step-with-action">
+            <span class="step-number">01</span>
+            <div>
+              <h2>Source video</h2>
+              <p>Drop or choose an MP4 to transcribe.</p>
+            </div>
+            <button id="generate-clear-button" type="button" class="reset-button step-action" title="Clear everything and start over">Reset</button>
+          </div>
+
+          <button id="generate-video-button" class="file-drop" type="button">
+            <span class="file-kind">MP4</span>
+            <span>
+              <strong id="generate-video-name">Choose a video</strong>
+              <small id="generate-video-meta">No file selected</small>
+            </span>
+          </button>
+
+          <div class="rule"></div>
+
+          <div class="step">
+            <span class="step-number">02</span>
+            <div>
+              <h2>Subtitle shaping</h2>
+              <p>How words are grouped into cues.</p>
+            </div>
+          </div>
+
+          <label class="range-field" title="Longest a single cue may span before a new one is started.">
+            <span>Max duration <output id="generate-max-duration-output">4.0s</output></span>
+            <input id="generate-max-duration" type="range" min="1" max="10" step="0.5" value="4" />
+          </label>
+
+          <div class="field-grid">
+            <label title="Maximum words on a single line within a cue.">
+              <span>Max words / line</span>
+              <input id="generate-max-words" type="number" min="1" step="1" value="6" />
+            </label>
+            <label title="Maximum number of lines (rows) per cue.">
+              <span>Rows</span>
+              <input id="generate-rows" type="number" min="1" step="1" value="2" />
+            </label>
+          </div>
+
+          <label class="identify-field" title="A silent gap (seconds) at least this long forces a new cue.">
+            <span>Pause (seconds)</span>
+            <input id="generate-pause" type="number" min="0" step="0.1" value="0.6" />
+          </label>
+
+          <div class="rule"></div>
+
+          <div class="step">
+            <span class="step-number">03</span>
+            <div>
+              <h2>Transcription</h2>
+              <p>Local Parakeet endpoint.</p>
+            </div>
+          </div>
+
+          <label class="identify-field" title="Base URL of the local Parakeet transcription server.">
+            <span>API base URL</span>
+            <input id="generate-base-url" type="text" value="http://localhost:5092" spellcheck="false" />
+          </label>
+
+          <label class="identify-field" title="Transcription model name passed to the endpoint.">
+            <span>Model</span>
+            <input id="generate-model" type="text" value="parakeet-tdt-0.6b-v3" spellcheck="false" />
+          </label>
+
+          <button id="generate-reset" type="button" class="reset-button">Reset knobs to defaults</button>
+
+          <div class="action-grid">
+            <button id="generate-run-button" class="render-button" disabled>
+              <span>Generate SRT</span>
+              <span aria-hidden="true">→</span>
+            </button>
+            <button id="generate-reveal-button" class="download" type="button" hidden>
+              Show in Finder
+            </button>
+          </div>
+
+          <div class="generate-tracker" id="generate-tracker" hidden>
+            <div class="generate-tracker-head">
+              <span class="identify-spinner" id="generate-spinner" aria-hidden="true"></span>
+              <strong id="generate-phase">Ready</strong>
+              <span class="identify-tracker-elapsed" id="generate-elapsed">0:00</span>
+            </div>
+            <ol class="generate-stages" id="generate-stages">
+              <li data-stage="extract">
+                <span class="generate-stage-label">Extract audio</span>
+                <span class="generate-stage-detail">Pull the audio track out of the MP4 with FFmpeg.</span>
+              </li>
+              <li data-stage="transcribe">
+                <span class="generate-stage-label">Transcribe</span>
+                <span class="generate-stage-detail">Send the audio to the local Parakeet endpoint.</span>
+              </li>
+              <li data-stage="subtitles">
+                <span class="generate-stage-label">Build subtitles</span>
+                <span class="generate-stage-detail">Group the timed words into readable cues.</span>
+              </li>
+              <li data-stage="done">
+                <span class="generate-stage-label">Done</span>
+                <span class="generate-stage-detail">Write the SRT next to your video.</span>
+              </li>
+            </ol>
+            <div class="progress-track"><div id="generate-progress-bar"></div></div>
+            <p id="generate-status" role="status">Ready</p>
+          </div>
+        </aside>
+
+        <section class="preview-panel">
+          <div class="preview-heading">
+            <div>
+              <span class="label">Generate SRT</span>
+              <span id="generate-result-status">Waiting for a video</span>
+            </div>
+          </div>
+
+          <div class="generate-output" id="generate-output">
+            <div class="empty-state" id="generate-empty-state">
+              <div class="play-mark">✦</div>
+              <strong>Transcribe an MP4 into an SRT</strong>
+              <span>The audio is extracted with FFmpeg, transcribed by Parakeet, and the SRT is written next to your video. Intermediate files are removed automatically.</span>
+            </div>
+
+            <div class="srt-viewer" id="generate-srt-viewer" hidden>
+              <div class="srt-viewer-bar">
+                <div class="srt-viewer-stats">
+                  <span class="srt-stat"><strong id="generate-cue-count">0</strong> cues</span>
+                  <span class="srt-stat"><strong id="generate-total-dur">0:00</strong> spoken</span>
+                  <span class="srt-stat"><strong id="generate-word-count">0</strong> words</span>
+                </div>
+                <button id="generate-copy-button" class="srt-copy-btn" type="button">
+                  <span>Copy SRT</span>
+                </button>
+              </div>
+              <div class="srt-cues" id="generate-srt-cues"></div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="workspace settings-workspace" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+        <aside class="controls">
+          <div class="step">
+            <span class="step-number">01</span>
+            <div>
+              <h2>Working directory</h2>
+              <p>Intermediate files and preview caches are stored here.</p>
+            </div>
+          </div>
+
+          <button id="settings-working-choose" type="button" class="render-button">
+            <span>Choose working directory</span>
+            <span aria-hidden="true">…</span>
+          </button>
+          <button id="settings-working-reset" type="button" class="reset-button" hidden>
+            Use default directory
+          </button>
+          <p id="settings-working-path" class="settings-path"></p>
+          <p class="settings-note">
+            Preview caches and temporary render/transcription files use this
+            directory. Final MP4 and SRT exports remain at their chosen output
+            locations.
+          </p>
+
+          <div class="rule"></div>
+
+          <div class="step">
+            <span class="step-number">02</span>
+            <div>
+              <h2>Background music</h2>
+              <p>Manage the folders RipeClips loads background tracks from.</p>
+            </div>
+          </div>
+
+          <button id="settings-music-add" type="button" class="render-button">
+            <span>Add a music folder</span>
+            <span aria-hidden="true">+</span>
+          </button>
+
+          <p class="settings-note">
+            Tracks are read directly from these folders on your Mac. Pick one
+            from the <strong>♪ Music</strong> button above a clip preview, set
+            its volume, and it is mixed under your clip's audio on export.
+            Supported formats: MP3, M4A, AAC, WAV, FLAC, OGG, OPUS.
+          </p>
+        </aside>
+
+        <section class="preview-panel">
+          <div class="preview-heading">
+            <div>
+              <span class="label">Music folders</span>
+              <span id="settings-result-status">Local files only</span>
+            </div>
+          </div>
+
+          <div class="settings-content">
+            <div id="settings-music-list" class="music-dir-list"></div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

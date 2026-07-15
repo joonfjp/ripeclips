@@ -1,0 +1,27 @@
+{
+  "name": "ripe-clips",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "check:deps": "bash scripts/check-deps.sh",
+    "setup:ffmpeg": "node scripts/setup-ffmpeg.mjs",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "pretauri:dev": "bash scripts/check-deps.sh",
+    "tauri:dev": "tauri dev",
+    "pretauri:build": "bash scripts/check-deps.sh",
+    "tauri:build": "tauri build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-http": "^2"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "vite": "^8.0.16"
+  }
+}

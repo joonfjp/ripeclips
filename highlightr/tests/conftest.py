@@ -1,0 +1,8 @@
+import sys
+from pathlib import Path
+
+# Ensure the project root (which contains the `app` package and `util.py`)
+# is importable regardless of where pytest is invoked from.
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))

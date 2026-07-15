@@ -1,0 +1,3311 @@
+/* Subtitle @font-face rules are generated from public/fonts/ at build time and
+   injected at runtime by presets.js (see scripts/fonts-plugin.js). */
+
+:root {
+  color-scheme: dark;
+  --page: #111310;
+  --panel: #191b18;
+  --panel-hover: #20231f;
+  --field: #10120f;
+  --text: #f0eee7;
+  --muted: #9a9d95;
+  --subtle: #777b73;
+  --border: #353832;
+  --border-strong: #4a4e46;
+  --rule: #2b2e29;
+  --button: #efede6;
+  --button-text: #171916;
+  --disabled: #3b3e38;
+  --stage: #080907;
+  --stage-text: #f5f2eb;
+  --ui-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  color: var(--text);
+  background: var(--page);
+  font-family: var(--ui-font);
+  font-synthesis: none;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --page: #f2efe8;
+  --panel: #faf8f3;
+  --panel-hover: #f2efe8;
+  --field: #fff;
+  --text: #20231f;
+  --muted: #696b65;
+  --subtle: #85877f;
+  --border: #cbc8bf;
+  --border-strong: #b9b7ae;
+  --rule: #dedbd3;
+  --button: #20231f;
+  --button-text: #fff;
+  --disabled: #c7c5bd;
+  --stage: #151614;
+  --stage-text: #f5f2eb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--page);
+  transition: background .2s, color .2s;
+}
+
+body.dragging-files .app {
+  outline: 2px dashed var(--button);
+  outline-offset: -12px;
+}
+
+body.dragging-files .file-drop {
+  border-color: var(--text);
+  background: var(--panel-hover);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.app {
+  width: min(1420px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 56px 0 72px;
+}
+
+header {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1.45fr;
+  align-items: end;
+  gap: 48px;
+  padding-bottom: 36px;
+  border-bottom: 1px solid var(--border);
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.header-title-text {
+  min-width: 0;
+}
+
+/* App logo is locked up inline with the "RipeClips" wordmark: sized to the
+   title's cap height and sitting on the same baseline as the letters, with a
+   slight tilt on hover. */
+.app-logo {
+  height: 1.4em;
+  width: auto;
+  margin-right: 0.16em;
+  vertical-align: baseline;
+  /* Nudge the mark down so its optical center aligns with the text baseline
+     (the letters have no descenders here). */
+  transform: translateY(0.3em);
+  transition: transform .25s ease;
+}
+
+.app-logo:hover {
+  transform: translateY(0.26em) rotate(-6deg) scale(1.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-logo {
+    transition: none;
+  }
+  .app-logo:hover {
+    transform: translateY(0.06em);
+  }
+}
+
+.eyebrow,
+.label {
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 8px 0 0;
+  font-size: clamp(44px, 6vw, 88px);
+  line-height: .95;
+  letter-spacing: -.065em;
+}
+
+header p {
+  max-width: 600px;
+  margin: 0 190px 0 0;
+  color: var(--muted);
+  font-size: clamp(16px, 1.5vw, 20px);
+  line-height: 1.55;
+}
+
+.theme-toggle {
+  display: flex;
+  height: 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  font: 500 10px var(--mono-font);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.header-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-toggle {
+  display: flex;
+  height: 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  font: 500 10px var(--mono-font);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.settings-toggle:hover,
+.settings-toggle[aria-selected="true"] {
+  border-color: var(--border-strong);
+  background: var(--panel-hover);
+}
+
+.settings-icon {
+  font-size: 14px;
+}
+
+.theme-toggle:hover {
+  border-color: var(--border-strong);
+  background: var(--panel-hover);
+}
+
+.theme-icon {
+  font-size: 13px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(340px, 430px) minmax(0, 1fr);
+  gap: 30px;
+  padding-top: 30px;
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+/* Primary action: the AI-powered "Clip it" flow is the hero of the nav. */
+.tab-primary {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--button);
+  color: var(--button-text, #0b0d09);
+  cursor: pointer;
+  font: 700 12px var(--mono-font);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  box-shadow: 0 6px 18px -8px var(--button);
+  transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
+}
+
+.tab-primary:hover {
+  filter: brightness(1.05);
+  box-shadow: 0 8px 22px -8px var(--button);
+}
+
+.tab-primary.active {
+  transform: translateY(-1px);
+}
+
+.tab-primary-spark {
+  font-size: 12px;
+  line-height: 1;
+  opacity: .85;
+}
+
+/* Divider separating the primary action from the manual tools. */
+.tab-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 2px;
+  background: var(--border);
+}
+
+/* Group of smaller, muted "manual tool" pills. */
+.tab-tools {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.tab-tool {
+  position: relative;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: 700 10px var(--mono-font);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.tab-tool:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.tab-tool.active {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--panel-hover);
+}
+
+.tool-description {
+  margin: 20px 0 0;
+  padding-left: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.workspace.loop-workspace {
+  padding-top: 30px;
+}
+
+.controls,
+.preview-panel {
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.controls {
+  padding: 28px;
+}
+
+.step {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.step-number {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--button);
+  color: var(--button-text);
+  font: 500 11px var(--mono-font);
+}
+
+h2 {
+  margin: 0 0 3px;
+  font-size: 17px;
+  letter-spacing: -.02em;
+}
+
+.step p {
+  margin: 0;
+  color: var(--subtle);
+  font-size: 12px;
+}
+
+/* A step header that carries an inline action (e.g. Reset) on the right.
+   Keep the number badge top-aligned with the label, matching plain `.step`. */
+.step-with-action {
+  align-items: flex-start;
+}
+
+.step-with-action > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.step-action.reset-button {
+  flex: 0 0 auto;
+  width: auto;
+  margin-top: 0;
+  padding: 7px 14px;
+}
+
+/* Collapsible Clip it sections (source files / identify clips). Top-align the
+   number badge with the label to match the plain `.step` layout in other tabs. */
+.studio-section-head {
+  align-items: flex-start;
+}
+
+.studio-section-head > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.studio-section-toggle {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.studio-section-toggle:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.studio-section-toggle .collapse-chevron {
+  transition: transform .15s ease;
+}
+
+.studio-section.collapsed .studio-section-toggle .collapse-chevron {
+  transform: rotate(180deg);
+}
+
+.studio-section.collapsed .studio-section-head {
+  margin-bottom: 0;
+}
+
+.studio-section.collapsed .studio-section-body {
+  display: none;
+}
+
+/* When a section is collapsed, hide its descriptive subtext (the <p> under the
+   <h2>) so the header shows just the title. Applies to every collapsible
+   studio section across all tabs. */
+.studio-section.collapsed .studio-section-head > div > p {
+  display: none;
+}
+
+/* On/off switch that sits in a section header (e.g. Captioning). */
+.section-switch {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.section-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.section-switch-track {
+  display: block;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--rule);
+  border: 1px solid var(--border);
+  transition: background .15s ease, border-color .15s ease;
+}
+
+.section-switch-track::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--panel);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  transform: translateY(-50%);
+  transition: transform .15s ease;
+}
+
+.section-switch input:checked + .section-switch-track,
+.caption-config-switch input:checked + .section-switch-track {
+  background: var(--button);
+  border-color: var(--button);
+}
+
+.section-switch input:checked + .section-switch-track::after,
+.caption-config-switch input:checked + .section-switch-track::after {
+  transform: translateY(-50%) translateX(18px);
+  background: var(--button-text);
+}
+
+.section-switch input:focus-visible + .section-switch-track,
+.caption-config-switch input:focus-visible + .section-switch-track {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+/* Greyed-out, non-interactive body when a section's switch is off, or a whole
+   export block before its prerequisites are met. */
+.studio-section-body.section-disabled,
+.caption-config-body.section-disabled,
+.loop-export.section-disabled,
+.loop-identify-settings.section-disabled {
+  opacity: .4;
+  pointer-events: none;
+  filter: grayscale(1);
+}
+
+/* Whole Export clip section locked until a detected clip is selected. Greys
+   and disables everything (format, captions, save) so it reads as unavailable
+   rather than showing an active-looking section with one dead button. The step
+   header keeps a touch more contrast so the "03 / Export clip" label stays
+   readable as a signpost. */
+.studio-section.section-locked {
+  opacity: .5;
+  pointer-events: none;
+  filter: grayscale(1);
+}
+
+.studio-section.section-locked .step {
+  opacity: .8;
+}
+
+/* Note under a settings summary flagging that its controls only take effect on
+   export/render and won't move the live preview. */
+.settings-render-note {
+  margin: 0 0 12px;
+  color: var(--subtle);
+  font: 11px/1.4 var(--mono-font);
+}
+
+/* Captioning inside the Export stage: a top-level option alongside the
+   format/background pickers (not indented as a subconfig), with an inline
+   on/off switch and a body holding the transcription + subtitle-style
+   controls. The extra top margin sets it apart from the pickers above. */
+.caption-config {
+  margin: 16px 0 12px;
+}
+
+.caption-config-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.caption-config-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.caption-config-label {
+  font: 700 11px var(--mono-font);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.caption-config-body {
+  margin-top: 12px;
+}
+
+.file-drop {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  min-height: 68px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+}
+
+.file-drop:hover {
+  border-color: var(--text);
+  background: var(--panel-hover);
+}
+
+/* Optional inputs read as quieter than the required ones: dimmer border,
+   muted text, lighter kind chip. They still brighten on hover/focus. */
+.file-drop.optional {
+  border-color: var(--border);
+  color: var(--muted);
+  opacity: .82;
+}
+
+.file-drop.optional .file-kind {
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--subtle);
+}
+
+.file-drop.optional:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+  opacity: 1;
+}
+
+.file-kind {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  background: var(--rule);
+  font: 500 10px var(--mono-font);
+}
+
+.file-drop strong,
+.file-drop small {
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-drop strong {
+  font-size: 13px;
+}
+
+.file-drop small {
+  margin-top: 3px;
+  color: var(--subtle);
+  font-size: 11px;
+}
+
+.rule {
+  height: 1px;
+  margin: 28px 0;
+  background: var(--rule);
+}
+
+fieldset {
+  margin: 0 0 20px;
+  padding: 0;
+  border: 0;
+}
+
+/* Keep the high-touch subtitle controls visible together. At the normal
+   sidebar width each color palette fits six chips per row. */
+.subtitle-style-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px 16px;
+  margin-top: 16px;
+}
+
+.style-grid-wide {
+  grid-column: 1 / -1;
+}
+
+/* A full-width labeled control (select) — roomier than the 2-up field-grid. */
+.stacked-field {
+  display: block;
+  margin-top: 16px;
+}
+
+.subtitle-style-grid .stacked-field,
+.subtitle-style-grid .range-field {
+  margin-top: 0;
+}
+
+.stacked-field > span {
+  display: block;
+  margin-bottom: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.subtitle-style-grid fieldset {
+  margin: 0;
+}
+
+.style-color-field {
+  min-width: 0;
+}
+
+/* Give grouped options in the border-style dropdown clear, readable headers. */
+select optgroup {
+  background: var(--panel);
+  color: var(--subtle);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+select optgroup option {
+  color: var(--text);
+  font-weight: 400;
+}
+
+legend,
+.field-grid label > span,
+.toggle-wrap > span,
+.font-file > span,
+.range-field > span {
+  display: block;
+  margin-bottom: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.font-file {
+  display: block;
+  margin-top: 16px;
+}
+
+.custom-font-details {
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+}
+
+.custom-font-details summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.font-file-button,
+.font-clear {
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  background: var(--field);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.font-file-button {
+  width: 100%;
+  text-align: left;
+}
+
+.font-file-button:hover,
+.font-clear:hover {
+  border-color: var(--border-strong);
+  background: var(--panel-hover);
+}
+
+.font-clear {
+  margin-top: 6px;
+}
+
+.font-file small {
+  display: block;
+  margin-top: 6px;
+  color: var(--subtle);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* Colour palette: compact circular chips that wrap, so the full set reads as
+   a tidy color picker instead of a tall grid of blocks. */
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.swatch {
+  position: relative;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.swatch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.swatch span {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--swatch);
+  /* Inner hairline keeps light chips (e.g. White) legible on the panel, outer
+     ring gives every chip a consistent edge. */
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .18), 0 0 0 1px var(--border);
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+
+.swatch:hover span {
+  transform: scale(1.14);
+}
+
+.swatch input:checked + span {
+  transform: scale(1.06);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .18),
+    0 0 0 2px var(--panel), 0 0 0 4px var(--text);
+}
+
+.swatch input:focus-visible + span {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .18),
+    0 0 0 2px var(--panel), 0 0 0 4px var(--border-strong);
+}
+
+.swatch em {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.toggle-field {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 16px;
+  cursor: pointer;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.toggle-row .toggle-field {
+  margin-top: 0;
+}
+
+.style-toggle-row {
+  min-height: 42px;
+  align-self: end;
+  padding-bottom: 4px;
+}
+
+.toggle-field input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--button);
+  cursor: pointer;
+}
+
+/* A toggle the current font can't honor (no real bold/italic face). */
+.toggle-field.disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.toggle-field.disabled input {
+  cursor: not-allowed;
+}
+
+.toggle-field > span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.reset-button {
+  width: 100%;
+  margin-top: 20px;
+  padding: 11px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.reset-button:hover {
+  border-color: var(--border-strong);
+  background: var(--panel-hover);
+  color: var(--text);
+}
+
+select {
+  width: 100%;
+  height: 42px;
+  padding: 0 34px 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--field);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.range-field {
+  display: block;
+  margin-top: 20px;
+}
+
+.range-field > span {
+  display: flex;
+  justify-content: space-between;
+}
+
+output {
+  font-family: var(--mono-font);
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--button);
+}
+
+.action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.burn-preview-actions {
+  margin-top: 16px;
+}
+
+.render-button {
+  display: flex;
+  width: 100%;
+  height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  border: 0;
+  background: var(--button);
+  color: var(--button-text);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.render-button:disabled {
+  background: var(--disabled);
+  color: var(--subtle);
+  cursor: not-allowed;
+}
+
+.progress-wrap {
+  margin-top: 16px;
+}
+
+.progress-track {
+  height: 3px;
+  overflow: hidden;
+  background: var(--rule);
+}
+
+/* Every inner fill bar inside a progress track shares the same look, so the
+   plain render bars and the stepper-card trackers stay visually consistent. */
+.progress-track > div {
+  width: 0;
+  height: 100%;
+  background: var(--button);
+  transition: width .2s;
+}
+
+#status {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font: 11px/1.4 var(--mono-font);
+}
+
+.preview-panel {
+  min-width: 0;
+  padding: 18px;
+  position: relative;
+}
+
+/* Subtitle styling depends on rapid visual comparison, so keep its preview in
+   view while the denser control column scrolls. */
+#panel-burn,
+#panel-caption {
+  align-items: start;
+}
+
+#panel-burn > .preview-panel,
+#panel-caption > .preview-panel {
+  position: sticky;
+  top: 16px;
+}
+
+/* Clip it: transcript toggle button (sits left of the Music button). */
+.transcript-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.transcript-toggle:hover {
+  border-color: var(--border-strong);
+  background: var(--panel-hover);
+  color: var(--text);
+}
+
+.transcript-toggle[aria-pressed="true"] {
+  border-color: var(--border-strong);
+  background: var(--panel-hover);
+  color: var(--text);
+}
+
+.transcript-toggle-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* Floating transcript overlay: sits on top of the video, ~40% wide, anchored
+   to the right edge of the stage at 50% opacity. */
+.transcript-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 40%;
+  z-index: 5;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 22px;
+  background: rgba(0, 0, 0, .7);
+  color: #fff;
+  border-left: 1px solid rgba(255, 255, 255, .18);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .5);
+}
+
+.transcript-panel-title {
+  margin: 0 0 4px;
+  font: 700 11px var(--mono-font);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, .55);
+}
+
+.transcript-panel-body {
+  margin: 0;
+  font: 400 14px/1.7 var(--ui-font);
+  color: #fff;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.transcript-panel-body .transcript-cue {
+  color: rgba(255, 255, 255, .62);
+  transition: color .12s, background .12s;
+}
+
+.transcript-panel-body .transcript-cue.current {
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, .16);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .16);
+}
+
+.transcript-panel-empty {
+  margin: 0;
+  font: 13px/1.6 var(--ui-font);
+  color: rgba(255, 255, 255, .6);
+}
+
+.preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 2px 16px;
+}
+
+.preview-heading > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* The small mono eyebrow ("Clip it") sits above the loaded file name. */
+.preview-heading > div > .label {
+  color: var(--subtle);
+}
+
+/* Loaded file name / status line: the primary label above the preview. */
+.preview-heading > div > span:last-child {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Match `.preview-heading > div`'s specificity (0,1,1) with a second class so
+   this row wins over the column rule; otherwise the transcript + music controls
+   in the Clip it header stack vertically instead of sitting on one row. */
+.preview-heading > .preview-heading-actions {
+  flex: none;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.preview-heading-actions .reset-button {
+  width: auto;
+  margin-top: 0;
+  padding: 6px 12px;
+}
+
+.local-badge {
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  color: var(--muted);
+  font: 10px var(--mono-font);
+}
+
+.stage {
+  position: relative;
+  display: grid;
+  min-height: 620px;
+  overflow: hidden;
+  place-items: center;
+  background: var(--stage);
+}
+
+.stage video {
+  display: block;
+  max-width: 100%;
+  max-height: 75vh;
+}
+
+.stage:fullscreen,
+.stage:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  background: #000;
+}
+
+.stage:fullscreen video,
+.stage:-webkit-full-screen video {
+  max-width: 100vw;
+  max-height: 100vh;
+}
+
+.stage-fullscreen {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 4;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, .34);
+  background: rgba(0, 0, 0, .62);
+  color: #fff;
+  cursor: pointer;
+  font-size: 19px;
+  line-height: 1;
+}
+
+.stage-fullscreen:hover {
+  border-color: rgba(255, 255, 255, .72);
+  background: rgba(0, 0, 0, .78);
+}
+
+.stage-fullscreen:disabled {
+  display: none;
+}
+
+.empty-state {
+  display: grid;
+  place-items: center;
+  color: var(--stage-text);
+  text-align: center;
+}
+
+/* The `hidden` attribute must win over the display rules above; without this,
+   `.empty-state` keeps its `display: grid` and stays visible even when hidden,
+   pushing the SRT viewer out of the clipped output panel. */
+[hidden] {
+  display: none !important;
+}
+
+/* Button variant of the empty state: the whole stage acts as a drop zone that
+   also opens the file picker on click. */
+.stage-drop {
+  width: 100%;
+  height: 100%;
+  align-content: center;
+  grid-auto-rows: max-content;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.stage-drop:hover strong {
+  color: var(--text);
+}
+
+.stage-drop:focus-visible {
+  outline: 2px solid var(--button);
+  outline-offset: -6px;
+}
+
+.empty-state strong {
+  margin-top: 16px;
+  font-size: 16px;
+}
+
+.empty-state span {
+  margin-top: 5px;
+  color: #8f918b;
+  font-size: 12px;
+}
+
+.play-mark {
+  display: grid;
+  width: 66px;
+  height: 66px;
+  place-items: center;
+  padding-left: 4px;
+  border: 1px solid #585a55;
+  border-radius: 50%;
+  color: #c4c5c0;
+  font-size: 15px;
+}
+
+.subtitle-preview {
+  position: absolute;
+  top: var(--subtitle-top);
+  left: var(--subtitle-left);
+  width: var(--subtitle-width);
+  display: none;
+  z-index: 2;
+  color: #00ff00;
+  font-weight: 700;
+  /* Never let the browser fake bold/italic: libass synthesizes those gaps
+     differently, so faux styling here would diverge from the burned render.
+     The Bold/Italic toggles are disabled for families lacking a real face. */
+  font-synthesis: none;
+  line-height: 1.22;
+  text-align: center;
+  transform: translateY(-50%);
+  white-space: pre-line;
+  paint-order: stroke fill;
+  pointer-events: none;
+}
+
+.subtitle-preview.visible {
+  display: block;
+}
+
+.subtitle-preview.boxed {
+  display: none;
+  left: var(--subtitle-center-x);
+  width: max-content;
+  max-width: var(--subtitle-width);
+  transform: translate(-50%, -50%);
+}
+
+.subtitle-preview.boxed.visible {
+  display: block;
+}
+
+.download {
+  display: grid;
+  width: 100%;
+  height: 54px;
+  place-items: center;
+  padding: 0 14px;
+  border: 0;
+  background: var(--button);
+  color: var(--button-text);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.download.disabled {
+  background: var(--disabled);
+  color: var(--subtle);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* --- Trim tab ----------------------------------------------------------- */
+
+.loop-fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.loop-field {
+  display: block;
+}
+
+.loop-field > span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--subtle);
+  font: 700 9px var(--mono-font);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.loop-field input {
+  width: 100%;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--field);
+  color: var(--text);
+  font: 13px var(--mono-font);
+}
+
+.loop-field input:focus {
+  outline: none;
+  border-color: var(--border-strong);
+}
+
+.loop-field output {
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  background: var(--rule);
+  color: var(--muted);
+  font: 13px var(--mono-font);
+}
+
+/* Empty (drop-zone) state needs a tall target; once a video is loaded the
+   stage hugs the clip so a landscape source doesn't leave big vertical bands
+   in the narrower two-column preview. */
+.loop-stage,
+#caption-stage,
+#panel-burn .stage {
+  min-height: 420px;
+}
+
+/* Once a clip is loaded the stage hugs it, but keep a modest floor so short or
+   vertical clips don't collapse the preview into a sliver. */
+.loop-stage:has(video:not([hidden])),
+#caption-stage:has(video:not([hidden])),
+#panel-burn .stage:has(video:not([hidden])) {
+  min-height: 260px;
+}
+
+/* Cap the previewed clip height so a tall/vertical source can't push the
+   timeline far down the page. */
+.loop-stage video,
+#caption-stage video,
+#panel-burn .stage video {
+  max-height: 60vh;
+}
+
+/* --- Portrait 9:16 preview -------------------------------------------------
+   Preview-only reframe for the Clip it tab. When Portrait is selected the
+   foreground clip is fit (letterboxed) into a centered 9:16 box; the frame
+   behind it supplies either black bars or a muted, blurred copy of the clip.
+   Both the frame and the foreground clip are absolutely positioned and sized
+   in fixed viewport units (no percentage-of-stage heights, which would create
+   a circular sizing loop with the grid-centered stage). The real reframe is
+   done by ffmpeg on export — this just mirrors it. */
+/* Portrait preview needs the stage to be at least as tall as the 9:16 frame
+   (54vh) so the absolutely-positioned frame isn't clipped by the stage's
+   `overflow: hidden`. The selector is qualified with the same
+   `:has(video:not([hidden]))` used by the loaded-clip rule above so it wins on
+   specificity — otherwise that rule's 260px floor clamps the stage and the
+   tall frame gets cropped into a short landscape sliver. */
+.loop-stage.portrait-active,
+.loop-stage.portrait-active:has(video:not([hidden])) {
+  min-height: 58vh;
+}
+
+.portrait-frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  /* Explicit 9:16 box. Width is derived from height rather than via the
+     `aspect-ratio` property, which some WebKit builds don't honor here — that
+     left the frame collapsed so only the ~square stage showed through. */
+  height: 54vh;
+  width: calc(54vh * 9 / 16);
+  transform: translate(-50%, -50%);
+  overflow: hidden;
+  background: #000;
+  /* A subtle outline so the 9:16 canvas boundary is visible against the dark
+     stage — otherwise the black pillarbox bars blend into the stage and the
+     reframe looks like it did nothing. */
+  outline: 1px solid var(--border-strong);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, .28);
+  z-index: 0;
+}
+
+.portrait-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Heavy blur + slight overscale so blurred edges never reveal the box. */
+  filter: blur(28px);
+  transform: scale(1.12);
+}
+
+/* Hide the blurred background copy by default. This is qualified with the
+   parent `.portrait-frame` (specificity 0,2,0) so it outranks the base
+   `.stage video { display: block }` rule (0,1,1) — a bare `.portrait-bg`
+   selector loses to it, which left the blurred copy visible even in black-bars
+   mode (so both modes looked blurred). */
+.portrait-frame .portrait-bg {
+  display: none;
+}
+
+/* Blurred-fill mode shows the background copy; black-bars mode leaves the
+   frame's solid black background visible instead. */
+.portrait-frame.blurred .portrait-bg {
+  display: block;
+}
+
+/* Overlay the foreground clip exactly on top of the 9:16 frame, letterboxed
+   with object-fit so its transparent gaps reveal the frame (bars/blur) behind.
+   The width is derived explicitly from the height (9/16) rather than via the
+   `aspect-ratio` property — a <video> has a natural (16:9) ratio, and browsers
+   ignore CSS `aspect-ratio` on replaced elements that already have one, which
+   left the clip stuck landscape. Absolute positioning takes it out of the grid
+   so the two layers align. Shared by the Clip it (#clipit-video) and Edit
+   (#loop-video) tabs. */
+.loop-stage.portrait-active #clipit-video,
+.loop-stage.portrait-active #loop-video {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  height: 54vh;
+  width: calc(54vh * 9 / 16);
+  max-height: 54vh;
+  max-width: 100%;
+  object-fit: contain;
+  background: transparent;
+  z-index: 1;
+}
+
+/* Edit tab: size both columns to their content instead of stretching to the
+   taller one. The stage hugs the loaded video, so a stretched preview column
+   would otherwise leave a dead vertical gap below the timeline. */
+#panel-loop {
+  align-items: start;
+}
+
+/* Lay the Edit preview out as a flex column so the heading, stage, and timeline
+   are evenly spaced whether or not a video is loaded (the stage height changes
+   between the empty drop-zone and a hugged clip, which otherwise left uneven
+   gaps). */
+#panel-loop .preview-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* The stage's own bottom margin would double up with the flex gap. */
+#panel-loop .loop-stage {
+  margin-bottom: 0;
+}
+
+/* Timeline area: toolbar, ruler, main (zoomed) track, and overview minimap. */
+.loop-timeline-area {
+  padding: 16px 12px 12px;
+}
+
+/* Range controls relocated beneath the timeline. */
+.loop-range-controls {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.loop-range-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.loop-range-actions .toggle-field {
+  margin: 0;
+}
+
+.loop-range-actions .reset-button {
+  width: auto;
+  margin-top: 0;
+}
+
+/* Export block (Edit tab's left controls column and Clip it's right column).
+   Uses the standard step spacing so it stays consistent with every other tab. */
+.loop-export .step {
+  margin-bottom: 20px;
+}
+
+/* Output-format + background pickers stack above the Save button. Double class
+   for specificity over the later `.reframe-modes` margin reset. */
+.reframe-modes.loop-format {
+  margin-bottom: 8px;
+}
+
+/* Background choice is a sub-config of Portrait 9:16, so indent it with a
+   connecting rail to show it hangs off the format selection above. The double
+   class raises specificity over the later `.reframe-modes` reset (which zeroes
+   margin/padding/border) so the indent isn't clobbered. Used by both the Edit
+   and Clip it export sections. */
+.reframe-modes.loop-bg {
+  margin-bottom: 4px;
+  margin-left: 16px;
+  padding-left: 14px;
+  border-left: 2px solid var(--border);
+}
+
+.loop-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.loop-zoom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.loop-zoom-btn {
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  background: var(--field);
+  color: var(--text);
+  cursor: pointer;
+  font: 700 13px var(--mono-font);
+}
+
+.loop-zoom-btn.wide {
+  font-size: 10px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.loop-zoom-btn:hover {
+  border-color: var(--border-strong);
+  background: var(--panel-hover);
+}
+
+.loop-zoom-btn:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+.loop-zoom-level {
+  min-width: 34px;
+  color: var(--muted);
+  font: 700 11px var(--mono-font);
+  text-align: center;
+}
+
+/* Ruler */
+.loop-ruler {
+  position: relative;
+  height: 16px;
+  margin-bottom: 2px;
+}
+
+.loop-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  color: var(--subtle);
+  font: 9px var(--mono-font);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Main track row: timeline + a vertical zoom slider on its right. Fixed height
+   so the slider can never dictate the row size. */
+.loop-timeline-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  height: 66px;
+}
+
+.loop-timeline-row .loop-timeline {
+  flex: 1 1 auto;
+  height: 100%;
+}
+
+/* Vertical zoom sliders to the right of the main track and the overview. A
+   custom track + thumb (not a native range input, which WKWebView renders
+   unreliably when vertical). The thumb's vertical position maps to zoom:
+   bottom = fit all, top = maximum zoom. */
+.loop-vscroll {
+  flex: 0 0 auto;
+  position: relative;
+  width: 4px;
+  height: 100%;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--rule) 80%, transparent);
+  cursor: ns-resize;
+  touch-action: none;
+  transition: background .15s ease, width .15s ease;
+}
+
+.loop-vscroll:hover {
+  background: var(--rule);
+}
+
+.loop-vscroll-thumb {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, 50%);
+  bottom: 0; /* updated via inline style (0 = bottom, 100% = top) */
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--button);
+  pointer-events: none;
+  transition: width .15s ease, height .15s ease;
+}
+
+.loop-vscroll:hover .loop-vscroll-thumb {
+  width: 12px;
+  height: 12px;
+}
+
+.loop-vscroll.disabled {
+  opacity: .3;
+  pointer-events: none;
+}
+
+/* The overview's slider matches the shorter overview strip height. */
+.loop-overview-wrap .loop-vscroll {
+  height: 26px;
+}
+
+/* Main track */
+.loop-timeline {
+  position: relative;
+  min-width: 0;
+  height: 66px;
+  border-radius: 4px;
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--rule) 70%, transparent) 0,
+      color-mix(in srgb, var(--rule) 70%, transparent) 1px,
+      transparent 1px,
+      transparent 9px),
+    linear-gradient(180deg, var(--panel-hover), var(--rule));
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.loop-timeline:not(.ready) {
+  opacity: .45;
+  pointer-events: none;
+}
+
+.loop-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.loop-gridline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.loop-range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  background:
+    repeating-linear-gradient(
+      45deg,
+      color-mix(in srgb, var(--button) 22%, transparent) 0,
+      color-mix(in srgb, var(--button) 22%, transparent) 8px,
+      color-mix(in srgb, var(--button) 12%, transparent) 8px,
+      color-mix(in srgb, var(--button) 12%, transparent) 16px);
+  border-left: 2px solid var(--button);
+  border-right: 2px solid var(--button);
+  pointer-events: none;
+}
+
+.loop-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: var(--text);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--text) 60%, transparent);
+  pointer-events: none;
+}
+
+.loop-playhead::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid var(--text);
+  transform: translateX(-50%);
+}
+
+.loop-playhead.hidden {
+  display: none;
+}
+
+.loop-hover {
+  position: absolute;
+  top: -19px;
+  z-index: 5;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: var(--button);
+  color: var(--button-text);
+  font: 9px var(--mono-font);
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.loop-handle {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  width: 14px;
+  height: 78px;
+  margin-left: -7px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--button);
+  cursor: ew-resize;
+  transform: translateY(-50%);
+  touch-action: none;
+}
+
+.loop-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 26px;
+  background: var(--button-text);
+  transform: translate(-50%, -50%);
+  box-shadow: -3px 0 0 var(--button-text), 3px 0 0 var(--button-text);
+}
+
+.loop-handle:hover {
+  border-color: var(--text);
+}
+
+/* When a handle's true position is outside the zoomed view, show a hint arrow
+   and pin it to the edge so it's still grabbable. */
+.loop-handle.off-start::before,
+.loop-handle.off-end::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  transform: translateY(-50%);
+}
+
+.loop-handle.off-start::before {
+  right: 100%;
+  margin-right: 3px;
+  border-right: 6px solid var(--button);
+}
+
+.loop-handle.off-end::before {
+  left: 100%;
+  margin-left: 3px;
+  border-left: 6px solid var(--button);
+}
+
+/* Overview minimap */
+.loop-overview-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.loop-overview-label {
+  flex: 0 0 auto;
+  color: var(--subtle);
+  font: 700 9px var(--mono-font);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.loop-overview {
+  position: relative;
+  flex: 1 1 auto;
+  height: 26px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--rule);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.loop-overview:not(.ready) {
+  opacity: .45;
+  pointer-events: none;
+}
+
+.loop-overview-clips {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.loop-overview-clip {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  min-width: 2px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--text) 35%, transparent);
+}
+
+.loop-overview-range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--button) 30%, transparent);
+  pointer-events: none;
+}
+
+.loop-overview-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--text);
+  pointer-events: none;
+}
+
+.loop-overview-view {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px;
+  border: 1px solid var(--button);
+  background: color-mix(in srgb, var(--button) 12%, transparent);
+  cursor: grab;
+}
+
+.loop-overview-view:active {
+  cursor: grabbing;
+}
+
+.loop-overview-grip {
+  width: 2px;
+  height: 12px;
+  background: var(--button);
+  opacity: .8;
+  cursor: ew-resize;
+}
+
+body.loop-dragging {
+  cursor: ew-resize;
+  user-select: none;
+}
+
+/* Clip edit / overwrite panel */
+.loop-clip-edit {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--button);
+  border-left: 3px solid var(--button);
+  background: var(--panel-hover);
+}
+
+.loop-clip-edit-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.loop-clip-edit-label {
+  flex: 0 0 auto;
+  color: var(--subtle);
+  font: 700 9px var(--mono-font);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.loop-clip-edit-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loop-clip-edit-delta {
+  margin: 8px 0 10px;
+  color: var(--muted);
+  font: 11px var(--mono-font);
+}
+
+.loop-clip-save,
+.loop-clip-revert {
+  width: 100%;
+  padding: 9px;
+  border: 1px solid var(--border);
+  background: var(--button);
+  color: var(--button-text);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.loop-clip-save {
+  text-transform: uppercase;
+}
+
+.loop-clip-revert {
+  margin-top: 6px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.loop-clip-revert:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.loop-clip-save:disabled,
+.loop-clip-revert:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+.loop-generate {
+  margin-top: 4px;
+}
+
+/* Collapsible identify-settings block in the Clip it tab. */
+.loop-identify-settings {
+  margin-top: 4px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-hover);
+}
+
+/* Give the caption tab's transcription settings room to breathe below the
+   source-file inputs above it. */
+#caption-transcribe-settings {
+  margin-top: 16px;
+}
+
+.loop-identify-settings > summary {
+  padding: 11px 14px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  list-style: none;
+  user-select: none;
+}
+
+.loop-identify-settings > summary::-webkit-details-marker {
+  display: none;
+}
+
+.loop-identify-settings > summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--subtle);
+  transition: transform .15s ease;
+}
+
+.loop-identify-settings[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.loop-identify-settings > :not(summary) {
+  margin-left: 14px;
+  margin-right: 14px;
+}
+
+.loop-identify-settings > :last-child {
+  margin-bottom: 14px;
+}
+
+.clipit-clips-block {
+  margin-top: 16px;
+}
+
+.loop-clips {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* No inner scroll: list every detected clip vertically and let the page
+     grow, so the whole set is visible without a nested scrollbar. */
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-hover);
+}
+
+.clips-summary {
+  margin: 16px 0 0;
+  font: 700 12px var(--mono-font);
+  letter-spacing: .02em;
+  color: var(--muted);
+}
+
+.loop-clips:focus-visible {
+  outline: 2px solid var(--button);
+  outline-offset: 2px;
+}
+
+.loop-clip {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  background: var(--field);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+
+.loop-clip:hover {
+  border-color: var(--border-strong);
+  border-left-color: var(--border-strong);
+  background: var(--panel-hover);
+}
+
+.loop-clip.selected {
+  border-color: var(--button);
+  border-left-color: var(--button);
+  background: var(--panel-hover);
+}
+
+.loop-clip.modified .loop-clip-range::after {
+  content: " ·edited";
+  color: var(--button);
+  font-weight: 700;
+}
+
+.loop-clip-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loop-clip-rank {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  background: var(--rule);
+  color: var(--muted);
+  font: 700 10px var(--mono-font);
+}
+
+.loop-clip-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.loop-clip-score {
+  flex: 0 0 auto;
+  color: var(--text);
+  font: 700 11px var(--mono-font);
+}
+
+.loop-clip-time {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.loop-clip-range {
+  font: 11px var(--mono-font);
+  color: var(--muted);
+}
+
+.loop-clip-dur {
+  color: var(--subtle);
+  font: 10px var(--mono-font);
+}
+
+.loop-clip-summary {
+  margin: 8px 0 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.loop-clip-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.loop-clip-tags span {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  color: var(--subtle);
+  font: 9px var(--mono-font);
+  letter-spacing: .04em;
+}
+
+@media (max-width: 900px) {
+  .app {
+    width: min(100% - 24px, 680px);
+    padding-top: 32px;
+  }
+
+  header,
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  header {
+    gap: 24px;
+  }
+
+  #panel-burn > .preview-panel,
+  #panel-caption > .preview-panel {
+    position: relative;
+    top: auto;
+  }
+
+  .stage {
+    min-height: 420px;
+  }
+}
+
+@media (max-width: 480px) {
+  .app {
+    width: 100%;
+    padding: 24px 12px 48px;
+  }
+
+  .controls,
+  .preview-panel {
+    padding: 16px;
+  }
+
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .subtitle-style-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .style-grid-wide {
+    grid-column: auto;
+  }
+
+  .action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stage {
+    min-height: 360px;
+  }
+}
+
+/* --- Identify clips ----------------------------------------------------- */
+
+.identify-field {
+  display: block;
+  margin-top: 16px;
+}
+
+.identify-field > span {
+  display: block;
+  margin-bottom: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.identify-field input,
+.identify-field textarea {
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--field);
+  color: var(--text);
+  font: 13px var(--ui-font);
+  resize: vertical;
+}
+
+.identify-field input:focus,
+.identify-field textarea:focus {
+  outline: none;
+  border-color: var(--border-strong);
+}
+
+.identify-workspace .field-grid,
+.loop-identify-settings .field-grid,
+#panel-generate .field-grid {
+  margin-top: 16px;
+}
+
+.identify-workspace .field-grid label > span,
+.loop-identify-settings .field-grid label > span,
+#panel-generate .field-grid label > span {
+  display: block;
+  margin-bottom: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.identify-workspace .field-grid input,
+.loop-identify-settings .field-grid input,
+#panel-generate .field-grid input {
+  width: 100%;
+  height: 42px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--field);
+  color: var(--text);
+  font: 13px var(--mono-font);
+  box-sizing: border-box;
+}
+
+.identify-workspace .field-grid input:focus,
+.loop-identify-settings .field-grid input:focus {
+  outline: none;
+  border-color: var(--border-strong);
+}
+
+/* The settings block adds 14px side margins to its children, so a full-width
+   reset button would overflow. Let it fill the available width instead. */
+.loop-identify-settings .reset-button {
+  width: auto;
+  display: block;
+}
+
+/* Tighten the gap between the stacked reset/collapse buttons. */
+.loop-identify-settings .reset-button + .collapse-button {
+  margin-top: 8px;
+}
+
+/* Collapse control: a quieter, borderless secondary action so it reads as a
+   panel toggle rather than another bordered button like Reset. */
+.collapse-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: auto;
+  padding: 8px 11px;
+  border: 0;
+  background: transparent;
+  color: var(--subtle);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.collapse-button:hover {
+  color: var(--text);
+}
+
+.collapse-chevron {
+  font-size: 8px;
+  line-height: 1;
+  transition: transform .15s ease;
+}
+
+.collapse-button:hover .collapse-chevron {
+  transform: translateY(-1px);
+}
+
+.identify-hint {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--button);
+  background: var(--panel-hover);
+  color: var(--muted);
+  font: 10px/1.5 var(--mono-font);
+  word-break: break-word;
+}
+
+.identify-results {
+  min-height: 620px;
+  max-height: 75vh;
+  overflow-y: auto;
+  padding: 6px 2px;
+}
+
+.identify-results .empty-state {
+  min-height: 560px;
+}
+
+.identify-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  margin-bottom: 16px;
+  background: var(--border);
+  border: 1px solid var(--border);
+}
+
+.identify-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--panel);
+}
+
+.identify-stat strong {
+  font: 700 15px var(--mono-font);
+}
+
+.identify-stat span {
+  color: var(--subtle);
+  font: 9px var(--mono-font);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.identify-clips {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.identify-clip {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--button);
+  background: var(--field);
+}
+
+.identify-clip-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.identify-clip-rank {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  background: var(--rule);
+  color: var(--muted);
+  font: 700 10px var(--mono-font);
+}
+
+.identify-clip-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.identify-clip-score {
+  flex: 0 0 auto;
+  color: var(--text);
+  font: 700 12px var(--mono-font);
+}
+
+.identify-clip-time {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 7px;
+  color: var(--muted);
+  font: 11px var(--mono-font);
+}
+
+.identify-clip-dur {
+  color: var(--subtle);
+  font-size: 10px;
+}
+
+.identify-clip-summary {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.identify-clip-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 11px;
+}
+
+.identify-clip-tags span {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  color: var(--subtle);
+  font: 9px var(--mono-font);
+  letter-spacing: .04em;
+}
+
+@media (max-width: 900px) {
+  .identify-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Editable slider readout (click a duration output to type an exact value). */
+.output-editor {
+  font-family: var(--mono-font);
+  width: 6ch;
+  padding: 0 2px;
+  text-align: right;
+}
+
+/* Identify status tracker (shared by the Clip it identify flow). */
+.identify-tracker {
+  margin-top: 20px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  background: var(--panel-hover);
+}
+
+.identify-tracker-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.identify-tracker-head strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  letter-spacing: -.01em;
+}
+
+.identify-tracker-elapsed {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font: 700 11px var(--mono-font);
+}
+
+.identify-spinner {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--button);
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.identify-spinner.spinning {
+  opacity: 1;
+  animation: identify-spin .7s linear infinite;
+}
+
+@keyframes identify-spin {
+  to { transform: rotate(360deg); }
+}
+
+.identify-stages {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 14px 0 12px;
+  padding: 0;
+  list-style: none;
+  counter-reset: stage;
+}
+
+.identify-stages li {
+  position: relative;
+  padding: 8px 10px 8px 30px;
+  border: 1px solid var(--border);
+  background: var(--field);
+  color: var(--subtle);
+  font: 700 9px var(--mono-font);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  counter-increment: stage;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Connector line joining each step's bullet to the next, for a vertical
+   stepper feel. */
+.identify-stages li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: calc(50% + 7px);
+  bottom: -5px;
+  width: 1px;
+  background: var(--border-strong);
+}
+
+.identify-stages li.done::after {
+  background: var(--button);
+}
+
+.identify-stages li::before {
+  content: counter(stage);
+  position: absolute;
+  top: 50%;
+  left: 6px;
+  display: grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--subtle);
+  font-size: 8px;
+  transform: translateY(-50%);
+}
+
+.identify-stages li.active {
+  border-color: var(--button);
+  color: var(--text);
+}
+
+.identify-stages li.active::before {
+  border-color: var(--button);
+  background: var(--button);
+  color: var(--button-text);
+}
+
+.identify-stages li.done {
+  color: var(--muted);
+}
+
+.identify-stages li.done::before {
+  content: "✓";
+  border-color: var(--button);
+  background: var(--button);
+  color: var(--button-text);
+}
+
+.identify-stages li.failed {
+  border-color: #e2554f;
+  color: #e2554f;
+}
+
+.identify-stages li.failed::before {
+  content: "!";
+  border-color: #e2554f;
+  background: #e2554f;
+  color: #fff;
+}
+
+.identify-tracker p[role="status"] {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font: 11px/1.4 var(--mono-font);
+}
+
+.identify-windows {
+  margin: 6px 0 0;
+  color: var(--subtle);
+  font: 10px var(--mono-font);
+  letter-spacing: .04em;
+}
+
+.generate-info {
+  min-height: 620px;
+  padding: 6px 2px;
+}
+
+.generate-info .empty-state {
+  min-height: 560px;
+}
+
+/* --- Generate SRT: vertical stage tracker -------------------------------- */
+
+.generate-tracker {
+  margin-top: 20px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  background: var(--panel-hover);
+}
+
+.generate-tracker-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.generate-tracker-head strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  letter-spacing: -.01em;
+}
+
+.generate-stages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0 12px;
+  padding: 0;
+  list-style: none;
+  counter-reset: gstage;
+}
+
+/* Each stage is a full-width row: numbered badge + label + wrapping detail. */
+.generate-stages li {
+  position: relative;
+  padding: 10px 12px 10px 40px;
+  border: 1px solid var(--border);
+  background: var(--field);
+  color: var(--subtle);
+  counter-increment: gstage;
+  transition: border-color .15s ease, color .15s ease;
+}
+
+.generate-stages li::before {
+  content: counter(gstage);
+  position: absolute;
+  top: 11px;
+  left: 12px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--subtle);
+  font: 700 9px var(--mono-font);
+}
+
+/* Vertical connector line linking the stage badges. */
+.generate-stages li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 20px;
+  top: 29px;
+  bottom: -9px;
+  width: 1px;
+  background: var(--border);
+}
+
+.generate-stage-label {
+  display: block;
+  font: 700 10px var(--mono-font);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.generate-stage-detail {
+  display: block;
+  margin-top: 3px;
+  color: var(--subtle);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.generate-stages li.active {
+  border-color: var(--button);
+  color: var(--text);
+}
+
+.generate-stages li.active::before {
+  border-color: var(--button);
+  background: var(--button);
+  color: var(--button-text);
+}
+
+.generate-stages li.active .generate-stage-detail {
+  color: var(--muted);
+}
+
+.generate-stages li.done {
+  color: var(--muted);
+}
+
+.generate-stages li.done::before {
+  content: "✓";
+  border-color: var(--button);
+  background: var(--button);
+  color: var(--button-text);
+}
+
+.generate-stages li.done::after {
+  background: var(--button);
+}
+
+.generate-stages li.failed {
+  border-color: #e2554f;
+  color: #e2554f;
+}
+
+.generate-stages li.failed::before {
+  content: "!";
+  border-color: #e2554f;
+  background: #e2554f;
+  color: #fff;
+}
+
+.generate-tracker p[role="status"] {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font: 11px/1.4 var(--mono-font);
+}
+
+/* --- Generate SRT: cue-card viewer --------------------------------------- */
+
+.generate-output {
+  min-height: 620px;
+  max-height: 75vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.generate-output .empty-state {
+  flex: 1 1 auto;
+  min-height: 560px;
+  align-content: center;
+  grid-auto-rows: max-content;
+  gap: 8px;
+  padding: 32px;
+}
+
+.generate-output .empty-state strong,
+.generate-output .empty-state span {
+  margin-top: 0;
+}
+
+.generate-output .empty-state .play-mark {
+  margin-bottom: 8px;
+}
+
+.generate-output .empty-state span {
+  max-width: 520px;
+  line-height: 1.6;
+}
+
+.srt-viewer {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.srt-viewer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 2px 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.srt-viewer-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.srt-stat {
+  color: var(--subtle);
+  font: 11px var(--mono-font);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.srt-stat strong {
+  color: var(--text);
+  font-size: 15px;
+  font-family: var(--ui-font);
+  letter-spacing: -.01em;
+}
+
+.srt-copy-btn {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: 700 11px var(--mono-font);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+
+.srt-copy-btn:hover {
+  border-color: var(--border-strong);
+  background: var(--panel-hover);
+  color: var(--text);
+}
+
+.srt-copy-btn.copied {
+  border-color: var(--button);
+  color: var(--text);
+}
+
+.srt-cues {
+  margin-top: 14px;
+  padding: 2px 6px 2px 2px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* A subtitle cue rendered as a card: index chip + timecode rail + text. */
+.srt-cue {
+  position: relative;
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  /* Keep the card at its natural height. As a flex child of the scrolling
+     `.srt-cues` column, it would otherwise shrink below its content once the
+     list overflows, and the card's `overflow: hidden` would clip the bottom
+     row of a two-row cue. */
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  background: var(--field);
+  overflow: hidden;
+  animation: srt-cue-in .25s ease both;
+}
+
+.srt-cue-index {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 0;
+  background: var(--panel-hover);
+  border-right: 1px solid var(--border);
+  color: var(--subtle);
+  font: 700 14px var(--mono-font);
+}
+
+.srt-cue-index small {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--subtle);
+}
+
+.srt-cue-body {
+  padding: 10px 14px 12px;
+  min-width: 0;
+}
+
+.srt-cue-time {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--subtle);
+  font: 10px var(--mono-font);
+  letter-spacing: .03em;
+}
+
+.srt-cue-time .srt-arrow {
+  color: var(--border-strong);
+}
+
+.srt-cue-dur {
+  margin-left: auto;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+}
+
+.srt-cue-text {
+  margin-top: 8px;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@keyframes srt-cue-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* --- Background music --------------------------------------------------- */
+
+.music-control {
+  position: relative;
+}
+
+.music-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 220px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.music-button:hover {
+  border-color: var(--border-strong);
+  background: var(--panel-hover);
+  color: var(--text);
+}
+
+.music-button.has-music {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.music-button-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.music-button-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.music-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: 300px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  background: var(--panel);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .35);
+}
+
+.music-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.music-stop {
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.music-stop:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.music-volume-field {
+  margin-top: 14px;
+}
+
+.music-empty {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.music-empty p {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.music-add-inline {
+  height: 44px;
+}
+
+.music-track-list {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.music-track {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  background: var(--field);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+}
+
+.music-track:hover {
+  border-color: var(--border);
+  background: var(--panel-hover);
+}
+
+.music-track.selected {
+  border-color: var(--border-strong);
+  background: var(--panel-hover);
+}
+
+.music-track-icon {
+  flex: none;
+  width: 14px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.music-track.selected .music-track-icon {
+  color: var(--text);
+}
+
+.music-track-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.music-settings-link {
+  margin-top: 28px;
+}
+
+/* --- Settings tab ------------------------------------------------------- */
+
+.settings-note {
+  margin-top: 20px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-path {
+  margin: 12px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--subtle);
+  font: 11px/1.5 var(--mono-font);
+}
+
+#settings-working-reset {
+  margin-top: 10px;
+}
+
+.settings-content {
+  padding: 4px 2px;
+}
+
+.music-dir-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.music-settings-empty {
+  margin: 0;
+  padding: 24px;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.music-dir-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  background: var(--field);
+}
+
+.music-dir-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.music-dir-name {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+.music-dir-path {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--subtle);
+  font: 11px var(--mono-font);
+}
+
+.music-dir-count {
+  flex: none;
+  color: var(--muted);
+  font: 11px var(--mono-font);
+}
+
+.music-dir-row .music-dir-remove {
+  flex: none;
+  width: auto;
+  margin-top: 0;
+  padding: 7px 12px;
+}
+
+/* --- With/without-music chooser ---------------------------------------- */
+
+.music-choice {
+  position: fixed;
+  z-index: 60;
+  min-width: 200px;
+  padding: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--panel);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .35);
+}
+
+.music-choice-head {
+  margin: 4px 8px 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--subtle);
+  font: 11px var(--mono-font);
+}
+
+.music-choice-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 10px;
+  border: 1px solid transparent;
+  background: var(--field);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.music-choice-option + .music-choice-option {
+  margin-top: 4px;
+}
+
+.music-choice-option:hover {
+  border-color: var(--border-strong);
+  background: var(--panel-hover);
+}
+
+.music-choice-icon {
+  flex: none;
+  width: 14px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* --- Format / background pickers (Edit + Clip it 9:16 options) ----------- */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.reframe-modes {
+  display: grid;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.reframe-mode {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+
+.reframe-mode:hover {
+  border-color: var(--border-strong, var(--border));
+}
+
+.reframe-mode:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft, rgba(255, 255, 255, .04));
+}
+
+.reframe-mode input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
+.reframe-mode span {
+  display: grid;
+  gap: 2px;
+}
+
+.reframe-mode small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.reframe-stage {
+  min-height: 560px;
+}

@@ -1,0 +1,23 @@
+# Dependencies
+node_modules
+
+# Frontend build output
+dist
+
+# Rust / Tauri build output
+src-tauri/target
+src-tauri/gen
+
+# Bundle artifacts (also covered by target/, listed for clarity)
+src-tauri/target/release/bundle
+*.app
+*.dmg
+
+# Vendored native FFmpeg sidecar (large; fetched via scripts/setup-ffmpeg.mjs)
+src-tauri/binaries/ffmpeg-*
+
+# Generated icon source
+app-icon.png
+
+# OS noise
+.DS_Store

@@ -5,7 +5,7 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       PYTHONUNBUFFERED: "1"
-      LLM_BASE_URL: "${LLM_BASE_URL:-http://host.docker.internal:11434/v1}"
+      LLM_BASE_URL: "${LLM_BASE_URL:-http://host.docker.internal:8080/v1}"
       LLM_MODEL: "${LLM_MODEL:-gemma4}"
       LLM_API_KEY: "${LLM_API_KEY:-}"
       LLM_TIMEOUT_SECONDS: "${LLM_TIMEOUT_SECONDS:-180}"

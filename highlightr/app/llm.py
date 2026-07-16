@@ -27,7 +27,7 @@ def _int_from_env(name: str, default: int) -> int:
 # Base URL of an OpenAI-compatible API (the part ending in `/v1`). Ripe Clips
 # posts to `{base}/chat/completions`. Point this at any OpenAI-compatible
 # backend: a local server, OpenAI, OpenRouter, etc.
-DEFAULT_BASE_URL = _str_from_env("LLM_BASE_URL", "http://localhost:11434/v1")
+DEFAULT_BASE_URL = _str_from_env("LLM_BASE_URL", "http://localhost:8080/v1")
 
 # Model name passed through to the backend.
 DEFAULT_MODEL = _str_from_env("LLM_MODEL", "gemma4")

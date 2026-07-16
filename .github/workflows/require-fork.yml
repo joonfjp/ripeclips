@@ -1,0 +1,23 @@
+name: Require fork for pull requests
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  require-fork:
+    name: require-fork
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject pull requests from upstream branches
+        env:
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          UPSTREAM_REPOSITORY: ${{ github.repository }}
+        run: |
+          if [ "$HEAD_REPOSITORY" = "$UPSTREAM_REPOSITORY" ]; then
+            echo "Pull requests must come from a fork, not a branch in the upstream repository."
+            exit 1
+          fi

@@ -138,8 +138,8 @@ highlightr has no dependency on them and works with any transcript source.
 highlightr talks to any OpenAI-compatible API. Point it at your backend:
 
 ```bash
-export LLM_BASE_URL="http://localhost:8080/v1"   # local Python -> llama-server on the same host
-export LLM_MODEL="your-model"
+export LLM_BASE_URL="http://localhost:8080/v1"   # local llama-server on the same host
+export LLM_MODEL="gemma4"
 # export LLM_API_KEY="sk-..."   # only if your backend requires auth
 ```
 
@@ -148,7 +148,7 @@ outputs (`response_format: json_schema`) and parses the JSON returned in the
 assistant message.
 
 Each request contains transcript text or excerpts derived from it. The default
-configuration uses a local Ollama server; if you configure a hosted endpoint,
+configuration uses a local llama-server; if you configure a hosted endpoint,
 that provider receives the request content. RipeClips never sends the source
 audio or video to the LLM. See [`../PROMPTS.md`](../PROMPTS.md) for the exact
 system and user prompt templates and the data inserted into them.
@@ -156,8 +156,11 @@ system and user prompt templates and the data inserted into them.
 
 - [`llama-server`](https://github.com/ggml-org/llama.cpp/tree/master/tools/server)
 
+  Get a compatible GGUF from the [Unsloth Gemma 4 Hugging Face
+  collection](https://huggingface.co/collections/unsloth/gemma-4).
+
   ```bash
-  # llama-server -m gemma4.gguf --port 8080  (started separately)
+  # llama-server -m /path/to/gemma4.gguf --host 0.0.0.0 --port 8080  (started separately)
   LLM_BASE_URL="http://host.docker.internal:8080/v1" \
   LLM_MODEL="gemma4" \
     docker compose up --build
@@ -220,7 +223,7 @@ uvicorn app.main:app --reload
 **With Docker:**
 
 ```bash
-LLM_BASE_URL="http://host.docker.internal:11434/v1" \
+LLM_BASE_URL="http://host.docker.internal:8080/v1" \
 LLM_MODEL="gemma4" \
 docker compose up --build
 ```
@@ -435,7 +438,7 @@ is optional and falls back to a built-in default.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `LLM_BASE_URL` | `http://localhost:11434/v1` | Base URL of an OpenAI-compatible API (should end in `/v1`) |
+| `LLM_BASE_URL` | `http://localhost:8080/v1` | Base URL of an OpenAI-compatible API (should end in `/v1`) |
 | `LLM_MODEL` | `gemma4` | Model name passed through to the backend |
 | `LLM_API_KEY` | *(unset)* | Optional bearer token; leave unset for local backends |
 | `LLM_TIMEOUT_SECONDS` | `180` | Per-request timeout for each chat completion call |

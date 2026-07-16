@@ -3,8 +3,8 @@
 RipeClips uses the LLM only to discover and rank highlight candidates. The
 transcription service does not call an LLM. Requests are sent to the
 OpenAI-compatible endpoint configured by `LLM_BASE_URL`; the default Docker
-configuration uses Ollama on the host at
-`http://host.docker.internal:11434/v1` with the `gemma4` model.
+configuration uses llama-server on the host at
+`http://host.docker.internal:8080/v1` with the `gemma4` model.
 
 If you replace that URL with a hosted provider, the provider receives the data
 described below and handles it under its own data and retention policies.

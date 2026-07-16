@@ -84,12 +84,17 @@ Steer the LLM in **_Identify settings_**:
 
 ## Quick start
 
-Start Ollama with the `gemma4` model, then start the transcription and
-highlight services. The default Docker configuration connects to Ollama on the
-host at `http://host.docker.internal:11434/v1`:
+Start [llama-server](https://github.com/ggml-org/llama.cpp/tree/master/tools/server)
+with the `gemma4` model, then start the transcription and highlight services.
+The default Docker configuration expects llama-server on the host at
+`http://host.docker.internal:8080/v1`:
+
+Get a compatible Gemma 4 model from the [Unsloth Gemma 4 Hugging Face
+collection](https://huggingface.co/collections/unsloth/gemma-4), then point
+`-m` at the downloaded GGUF file.
 
 ```bash
-ollama pull gemma4
+llama-server -m /path/to/gemma4.gguf --host 0.0.0.0 --port 8080
 docker compose up --build
 ```
 
@@ -124,8 +129,8 @@ is in [`app/README.md`](app/README.md#installing-the-prerequisites).
 
 Highlight identification sends transcript text, timestamps, optional speaker
 names, selection preferences, and candidate excerpts to the configured LLM
-endpoint. With the default configuration this is the Ollama server running on
-your host. If you configure a hosted provider, that provider receives this
+endpoint. With the default configuration this is llama-server running on your
+host. If you configure a hosted provider, that provider receives this
 content and handles it under its own data and retention policies.
 
 RipeClips does not send video or audio files to the LLM. Audio is sent only to

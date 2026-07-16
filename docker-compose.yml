@@ -37,7 +37,7 @@ services:
       # OpenAI-compatible chat/completions endpoint used by the highlightr app. The base
       # URL should end in /v1; the app posts to {LLM_BASE_URL}/chat/completions.
       # Override as needed: LLM_BASE_URL=... LLM_MODEL=... docker compose up
-      LLM_BASE_URL: "${LLM_BASE_URL:-http://host.docker.internal:11434/v1}"
+      LLM_BASE_URL: "${LLM_BASE_URL:-http://host.docker.internal:8080/v1}"
       LLM_MODEL: "${LLM_MODEL:-gemma4}"
       LLM_API_KEY: "${LLM_API_KEY:-}"
     restart: unless-stopped

@@ -8,6 +8,8 @@
 
 ## Checklist
 
+- [ ] This pull request is from a branch in my fork, targeting upstream
+  `main`.
 - [ ] This change is focused and documented where needed.
 - [ ] I did not include secrets, local media, or generated build artifacts.
 - [ ] I added or updated tests when appropriate.

@@ -8,10 +8,12 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
 
+from . import config
 from .audio import load_audio
+from .batchworker import QueueFullError
 from .chunker import auto_chunk, slice_chunks
 from .config import (
     CPU_INFO,
@@ -74,6 +76,47 @@ def _segments_to_vtt(segments: List[Dict[str, Any]]) -> str:
     return "\n".join(out)
 
 
+_READ_CHUNK = 1024 * 1024
+
+
+async def _read_upload(file: UploadFile) -> bytes:
+    """Read an upload, rejecting it with 413 once it exceeds the size limit."""
+    limit = config.MAX_UPLOAD_BYTES
+    too_large = HTTPException(
+        status_code=413,
+        detail=f"upload exceeds {limit // (1024 * 1024)} MB limit",
+    )
+    try:
+        if file.size is not None and file.size > limit:
+            raise too_large
+        parts: List[bytes] = []
+        total = 0
+        while chunk := await file.read(_READ_CHUNK):
+            total += len(chunk)
+            if total > limit:
+                raise too_large
+            parts.append(chunk)
+    finally:
+        await file.close()
+    return b"".join(parts)
+
+
+def _prepare_audio(raw: bytes):
+    """Decode + VAD-chunk one upload. CPU/subprocess bound; runs in audio_pool."""
+    wav = load_audio(raw)
+    ranges = auto_chunk(wav)
+    return wav, ranges, slice_chunks(wav, ranges)
+
+
+async def _submit(worker, pieces, model_name: str):
+    try:
+        return await worker.submit_many(pieces, model_name)
+    except QueueFullError as exc:
+        raise HTTPException(
+            status_code=503, detail=str(exc)
+        ) from exc
+
+
 def _extract(result) -> Dict[str, Any]:
     """Convert onnx_asr result (with timestamps) into a plain dict."""
     text = _clean_text(getattr(result, "text", str(result)))
@@ -120,28 +163,30 @@ async def transcribe(
         logger.warning("Unknown model %r, using default", model_name)
         model_name = DEFAULT_MODEL
 
-    raw = await file.read()
-    await file.close()
+    raw = await _read_upload(file)
     if not raw:
         raise HTTPException(status_code=400, detail="Empty file")
 
     t0 = time.perf_counter()
+    loop = asyncio.get_running_loop()
     try:
-        wav = load_audio(raw)
+        # Decode (ffmpeg subprocess) and Silero VAD are blocking; keep them off
+        # the event loop so health checks and other requests stay responsive.
+        wav, ranges, pieces = await loop.run_in_executor(
+            request.app.state.audio_pool, _prepare_audio, raw
+        )
     except Exception as exc:
         logger.exception("audio decode failed")
         raise HTTPException(status_code=415, detail=f"audio decode failed: {exc}") from exc
+    del raw
     total_duration = wav.size / TARGET_SR
     if total_duration <= 0:
         raise HTTPException(status_code=400, detail="Empty audio")
-
-    ranges = auto_chunk(wav)
-    pieces = slice_chunks(wav, ranges)
     decode_ms = (time.perf_counter() - t0) * 1000
 
     worker = request.app.state.worker
     t1 = time.perf_counter()
-    results = await worker.submit_many(pieces, model_name)
+    results = await _submit(worker, pieces, model_name)
     infer_ms = (time.perf_counter() - t1) * 1000
 
     # Stitch results back together with absolute timestamps
@@ -226,17 +271,15 @@ async def transcribe_batch(
         model_name = DEFAULT_MODEL
 
     # Decode in parallel using the audio thread pool implicitly through asyncio
-    raws = []
-    for f in files:
-        raws.append(await f.read())
-        await f.close()
+    raws = [await _read_upload(f) for f in files]
 
     loop = asyncio.get_running_loop()
     pool = request.app.state.audio_pool
     wavs = await asyncio.gather(*(loop.run_in_executor(pool, load_audio, r) for r in raws))
+    del raws
 
     worker = request.app.state.worker
-    results = await worker.submit_many(list(wavs), model_name)
+    results = await _submit(worker, list(wavs), model_name)
     texts = [_clean_text(getattr(r, "text", str(r))) for r in results]
     return {
         "results": [

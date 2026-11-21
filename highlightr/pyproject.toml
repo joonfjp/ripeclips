@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "highlightr"
+dynamic = ["version"]
+description = "Row-backed highlight identification for long-form transcripts"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi==0.115.6",
+  "pydantic==2.10.4",
+  "python-multipart==0.0.20",
+  "uvicorn[standard]==0.34.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<0.29",
+  "mypy>=1.13,<2",
+  "pytest==9.1.1",
+  "ruff>=0.9,<1",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "app.version.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+plugins = ["pydantic.mypy"]
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true

@@ -7,7 +7,7 @@ file movement belong to later pipeline stages.
 ## Run locally
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
 uvicorn app.main:app --reload
 ```
 
@@ -22,9 +22,11 @@ The API listens on `http://localhost:8000`.
 ## Endpoints
 
 - `GET /health`
+- `GET /ready`
 - `POST /v2/highlights/identify`
 - `POST /v2/highlights/identify-srt`
 - `POST /v2/highlights/jobs`
+- `POST /v2/highlights/srt-jobs`
 - `GET /v2/highlights/jobs/{job_id}`
 - `GET /v2/highlights/jobs/{job_id}/result`
 
@@ -74,9 +76,9 @@ curl -X POST http://localhost:8000/v2/highlights/identify \
   }'
 ```
 
-Candidate discovery and global ranking use the configured structured LLM proxy
-through `call_llm_structured`. The API still recovers final timing from
-transcript row IDs instead of trusting model-generated timestamps.
+Candidate discovery, global ranking, and metadata enrichment use the injectable
+`LLMClient`. Provider output is decoded strictly and validated against typed
+contracts before the API recovers final timing from transcript row IDs.
 
 ## Test With A Real SRT
 
@@ -123,7 +125,7 @@ the non-overlap selector. Pass `--max-clips N` to cap the final result count.
 
 If `--window` or `--stride` are omitted, the backend chooses smart defaults from
 `max_clip_duration_seconds`. For the default 20-minute max clip, it uses a
-20-minute discovery window and a 5-minute stride.
+27-minute discovery window and a 10-minute stride.
 
 The backend parses the SRT into row-backed transcript data and runs the same
 highlight identifier used by the JSON endpoint.
@@ -138,7 +140,15 @@ The internal strictness controls are `topic_policy`, `admission_strictness`, and
 `--discovery-mode` presets:
 
 - `best_only`: strict, broad highlight discovery.
-- `topic_focused`: require substantial topic relevance.
-- `topic_only`: reject clips that are not directly centered on the topics.
+- `topic_focused`: independently verify candidates and return only clips that
+  directly or materially relate to the supplied topics.
 - `coverage`: try to keep at least one usable candidate per window.
 - `research_sweep`: broadest mode for review/debugging.
+
+Independent discovery windows can run with bounded concurrency through
+`LLM_MAX_CONCURRENCY`. Ranking uses tournament batches and metadata uses
+independent batches, both bounded by `LLM_MAX_PROMPT_CHARS`.
+
+Async jobs use a bounded, expiring in-memory `JobStore` by default. They are
+safe for a single API process but are not durable across restarts or shared
+across multiple workers.

@@ -57,8 +57,8 @@ python server.py
 We followed the user requirement to "establish a measured baseline before
 changing code" and "identify bottlenecks with evidence":
 
-1. **Baseline** (`bench_corpus/baseline.json`): legacy `app.py` running on
-   Waitress, default settings, warmed up.
+1. **Baseline** (`bench_corpus/baseline.json`): the retired Flask/Waitress
+   implementation, using its default settings and warmed up.
 2. **Profile**: looked at where time was going during a 300 s clip.
    The legacy server spawns `ffmpeg -loglevel … -filter silencedetect` to
    find chunks, then runs **sequential** per-chunk inference. Inference
@@ -130,7 +130,6 @@ changing code" and "identify bottlenecks with evidence":
 
 ```
 parakeet-tdt-0.6b-v3-fastapi-openai/
-├── app.py                       # Legacy Flask service (kept for reference)
 ├── server.py                    # New uvicorn entry point (port 5092)
 ├── pin_pcores.sh                # Optional P-core taskset wrapper
 └── parakeet_service/
@@ -158,7 +157,7 @@ All optional. Defaults are tuned for an 8-core CPU.
 | Variable                   | Default      | Meaning                                                  |
 |----------------------------|--------------|----------------------------------------------------------|
 | `PARAKEET_HOST`            | `0.0.0.0`    | bind host                                                |
-| `PARAKEET_PORT`            | `5092`       | bind port (matches the legacy service)                   |
+| `PARAKEET_PORT`            | `5092`       | bind port                                                 |
 | `PARAKEET_DEFAULT_MODEL`   | `istupakov/parakeet-tdt-0.6b-v3-onnx` | default OpenAI model when form field is omitted |
 | `PARAKEET_INFER_WORKERS`   | `4`          | parallel ORT workers in `InferencePool` when `PARAKEET_BATCHED=0` |
 | `PARAKEET_BATCHED`         | `1`          | `1` → use GPU-friendly `BatchWorker`; set `0` for CPU INT8 |
@@ -172,9 +171,11 @@ All optional. Defaults are tuned for an 8-core CPU.
 | `PARAKEET_VAD_SPEECH_PAD_MS` | `120`      | pad around speech segments                               |
 | `PARAKEET_MAX_BATCH_SIZE`  | `4`          | max batch (only used when `PARAKEET_BATCHED=1`)          |
 | `PARAKEET_BATCH_WINDOW_MS` | `4`          | batch collection window                                  |
-| `PARAKEET_ORT_INTRA_THREADS` | `1` for GPU, physical cores for CPU override | ORT intra-op threads |
+| `PARAKEET_ORT_INTRA_THREADS` | `1` for GPU, physical cores ÷ concurrent workers for CPU | ORT intra-op threads |
 | `PARAKEET_ORT_INTER_THREADS` | `1`        | ORT inter-op threads                                     |
 | `PARAKEET_AUDIO_WORKERS`   | `min(8, physical)` | audio decode/chunk worker pool                     |
+| `PARAKEET_MAX_UPLOAD_MB`   | `1024`       | per-upload size limit; larger uploads get HTTP 413       |
+| `PARAKEET_MAX_QUEUE`       | `1024`       | max chunks awaiting inference; beyond this new requests get HTTP 503 |
 
 ## Running
 
@@ -182,7 +183,7 @@ All optional. Defaults are tuned for an 8-core CPU.
 # Conda-isolated install (matches the benchmark env)
 conda create -n parakeet-v3 python=3.11 -y
 conda activate parakeet-v3
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 
 # Optional CUDA path, installed only in the benchmark env used for GPU tests
 pip install onnxruntime-gpu==1.23.2

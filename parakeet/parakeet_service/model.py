@@ -7,6 +7,7 @@ Wraps `onnx_asr` so we can:
   * call `recognize(list_of_waveforms)` for true batched inference
 """
 from __future__ import annotations
+import threading
 from typing import Any, Dict, List
 
 import onnxruntime as ort
@@ -23,6 +24,7 @@ from .config import (
 )
 
 _MODELS: Dict[str, object] = {}
+_LOAD_LOCK = threading.Lock()
 _CUDA_PRELOADED = False
 
 
@@ -44,14 +46,16 @@ def _preload_cuda_libraries() -> None:
         logger.warning("CUDA/cuDNN preload failed; GPU may be unavailable: %s", exc)
 
 
-def _build_sess_options() -> ort.SessionOptions:
+def _build_sess_options(*, gpu: bool = False) -> ort.SessionOptions:
     so = ort.SessionOptions()
     so.intra_op_num_threads = ORT_INTRA_THREADS
     so.inter_op_num_threads = ORT_INTER_THREADS
     so.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
     so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
     so.add_session_config_entry("session.set_denormal_as_zero", "1")
-    so.add_session_config_entry("session.intra_op.allow_spinning", "1")
+    # Spinning keeps idle intra-op threads burning CPU between ops; that only
+    # pays off on GPU, where the CPU side is a thin launcher.
+    so.add_session_config_entry("session.intra_op.allow_spinning", "1" if gpu else "0")
     so.add_session_config_entry("session.inter_op.allow_spinning", "0")
     return so
 
@@ -113,12 +117,26 @@ def _validate_gpu_binding(name: str, model: Any) -> None:
 def load_model(name: str = DEFAULT_MODEL, *, with_timestamps: bool = True):
     if name in _MODELS:
         return _MODELS[name]
+    # Serialize loads so concurrent first requests don't each build a session.
+    with _LOAD_LOCK:
+        if name in _MODELS:
+            return _MODELS[name]
+        return _load_model_locked(name, with_timestamps=with_timestamps)
+
+
+def _load_model_locked(name: str, *, with_timestamps: bool):
     if name not in MODEL_CONFIGS:
         logger.warning("Unknown model %r, falling back to %s", name, DEFAULT_MODEL)
         name = DEFAULT_MODEL
+        if name in _MODELS:
+            return _MODELS[name]
     cfg = MODEL_CONFIGS[name]
     providers = _resolve_providers()
-    so = _build_sess_options()
+    gpu = any(
+        (p[0] if isinstance(p, tuple) else p) == "CUDAExecutionProvider"
+        for p in providers
+    )
+    so = _build_sess_options(gpu=gpu)
     logger.info("Loading %s (quant=%s) providers=%s intra=%d inter=%d",
                 cfg["hf_id"], cfg["quantization"], providers,
                 ORT_INTRA_THREADS, ORT_INTER_THREADS)

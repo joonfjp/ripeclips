@@ -140,8 +140,10 @@ def auto_chunk(wav: np.ndarray) -> List[Tuple[int, int]]:
                 chunks.append((cur_start, cur_end))
                 cur_start = e
                 cur_end = e
-    # Tail
-    chunks.append((cur_start, max(cur_end, cur_start + 1)))
+    # A force-cut may already have consumed the final speech segment. Do not
+    # invent a one-sample tail: onnx_asr squeezes it to a scalar and crashes.
+    if cur_end > cur_start:
+        chunks.append((cur_start, cur_end))
 
     # Guard: very long final chunk → split on time
     out: List[Tuple[int, int]] = []
@@ -159,4 +161,6 @@ def auto_chunk(wav: np.ndarray) -> List[Tuple[int, int]]:
 
 
 def slice_chunks(wav: np.ndarray, ranges: List[Tuple[int, int]]) -> List[np.ndarray]:
-    return [wav[s:e].copy() for s, e in ranges]
+    # Views, not copies: ranges cover the waveform, so copying would double the
+    # request's audio memory. ORT only reads its inputs.
+    return [wav[s:e] for s, e in ranges]

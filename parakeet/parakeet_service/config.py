@@ -89,12 +89,29 @@ try:
 except Exception:
     _physical = _available_logical
 
-DEFAULT_INTRA = 1 if USE_GPU != "false" else min(_physical, _available_logical)
+# Inference concurrency. InferencePool runs INFER_WORKERS recognize() calls on a
+# shared session; BatchWorker runs one batch at a time.
+BATCHED = os.getenv("PARAKEET_BATCHED", "1") == "1"
+INFER_WORKERS = _get_env_int("PARAKEET_INFER_WORKERS", 4)
+_CONCURRENT_RUNS = 1 if BATCHED else INFER_WORKERS
+
+# Split the cores across concurrent runs so N workers x intra threads does not
+# oversubscribe the CPU.
+DEFAULT_INTRA = (
+    1 if USE_GPU != "false"
+    else max(1, min(_physical, _available_logical) // _CONCURRENT_RUNS)
+)
 ORT_INTRA_THREADS = _get_env_int("PARAKEET_ORT_INTRA_THREADS", DEFAULT_INTRA)
 ORT_INTER_THREADS = _get_env_int("PARAKEET_ORT_INTER_THREADS", 1)
 
 # Audio preprocessing pool
 AUDIO_WORKERS = _get_env_int("PARAKEET_AUDIO_WORKERS", min(8, _physical))
+
+# Admission limits
+MAX_UPLOAD_MB = _get_env_int("PARAKEET_MAX_UPLOAD_MB", 1024)
+MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
+# Max chunks waiting for inference before new requests get 503.
+MAX_QUEUE = _get_env_int("PARAKEET_MAX_QUEUE", 1024)
 
 # Keep numeric libs from creating competing thread pools
 for _e in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
@@ -119,4 +136,5 @@ CPU_INFO = {
     "ort_intra": ORT_INTRA_THREADS,
     "ort_inter": ORT_INTER_THREADS,
     "audio_workers": AUDIO_WORKERS,
+    "infer_workers": INFER_WORKERS,
 }

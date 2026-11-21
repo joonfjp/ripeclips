@@ -18,7 +18,19 @@ import numpy as np
 from .config import TARGET_SR, logger
 
 
+def _pcm_to_float(pcm: bytes, dtype: str, scale: float, offset: float = 0.0) -> np.ndarray:
+    """Convert integer PCM to float32 with a single output allocation."""
+    out = np.frombuffer(pcm, dtype=dtype).astype(np.float32)
+    if offset:
+        out -= offset
+    out *= 1.0 / scale
+    return out
+
+
 def _wav_info(data: bytes) -> Optional[dict]:
+    # Cheap header check first so compressed uploads skip the wave parser.
+    if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        return None
     try:
         with wave.open(BytesIO(data), "rb") as w:
             return {
@@ -49,13 +61,13 @@ def _decode_pcm_wav(data: bytes, info: dict) -> Optional[np.ndarray]:
         if info["sample_rate"] != TARGET_SR:
             pcm, _ = audioop.ratecv(pcm, sw, ch, info["sample_rate"], TARGET_SR, None)
         if sw == 1:
-            return (np.frombuffer(pcm, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
+            return _pcm_to_float(pcm, np.uint8, 128.0, offset=128.0)
         if sw == 2:
-            return np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
+            return _pcm_to_float(pcm, "<i2", 32768.0)
         if sw == 4:
-            return np.frombuffer(pcm, dtype="<i4").astype(np.float32) / 2147483648.0
-        pcm16 = audioop.lin2lin(pcm, sw, 2)
-        return np.frombuffer(pcm16, dtype="<i2").astype(np.float32) / 32768.0
+            return _pcm_to_float(pcm, "<i4", 2147483648.0)
+        pcm = audioop.lin2lin(pcm, sw, 2)
+        return _pcm_to_float(pcm, "<i2", 32768.0)
     except (wave.Error, EOFError, OSError, audioop.error, ValueError):
         return None
 
@@ -71,7 +83,9 @@ def _ffmpeg_decode(data: bytes) -> np.ndarray:
     p = subprocess.run(cmd, input=data, capture_output=True, check=False)
     if p.returncode != 0:
         raise RuntimeError(f"ffmpeg decode failed: {p.stderr.decode(errors='ignore')[:300]}")
-    return np.frombuffer(p.stdout, dtype="<i2").astype(np.float32) / 32768.0
+    pcm = p.stdout
+    del p  # release the CompletedProcess (and its stderr) before converting
+    return _pcm_to_float(pcm, "<i2", 32768.0)
 
 
 def load_audio(data: bytes) -> np.ndarray:

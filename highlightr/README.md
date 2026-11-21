@@ -59,21 +59,21 @@ highlightr has no dependency on them and works with any transcript source.
 
 - **Transcript-driven highlight detection** — ingest a row-backed JSON
   transcript or upload a raw `.srt` file directly.
-- **LLM discovery + global ranking** — the episode is scanned in overlapping
-  windows to surface candidates, then de-duplicated candidates are re-ranked
-  against the whole episode when there is more than one, so scores are
-  calibrated, not local.
+- **LLM discovery + topic verification + global ranking** — the episode is
+  scanned in overlapping windows to surface candidates. Topic-focused runs
+  independently verify each candidate against its transcript before
+  de-duplicated candidates are re-ranked against the whole episode.
 - **Timestamps you can trust** — final clip boundaries come from transcript row
   IDs, with confidence informed by verbatim text anchors, not from
   model-generated numbers.
 - **Transparent scoring** — every clip reports `interestingness`,
-  `self_contained`, `boundary_quality`, `topic_relevance`, and
+  `shareability`, `self_contained`, `boundary_quality`, `topic_relevance`, and
   `recovery_confidence`, plus a calibrated `overall` score.
-- **Topic focusing** — steer selection toward specific themes with `soft`,
-  `hard`, or `only` topic policies, plus tunable admission strictness.
-- **Discovery presets** — `best_only`, `topic_focused`, `topic_only`,
-  `coverage`, and `research_sweep` cover everything from "just the bangers" to
-  "show me everything for review."
+- **Topic focusing** — `topic_focused` returns only clips independently
+  verified as directly or materially related to the exact topics supplied.
+- **Discovery presets** — `best_only`, `topic_focused`, `coverage`, and
+  `research_sweep` cover everything from "just the bangers" to "show me
+  everything for review."
 - **Dedupe + non-overlap selection** — near-duplicate candidates are merged and
   overlapping spans are pruned so you get distinct clips.
 - **Sync or async** — run a quick synchronous request, or submit a job and poll
@@ -103,6 +103,11 @@ highlightr has no dependency on them and works with any transcript source.
    ┌──────────────────────┐
    │  Anchor recovery      │   score confidence against verbatim quotes;
    │  + row-backed timing  │   pull exact start/end from transcript rows
+   └──────────┬───────────┘
+              ▼
+   ┌──────────────────────┐
+   │  Topic verification  │   focused runs require a direct/material match
+   │  (focused runs)      │   plus verbatim supporting evidence
    └──────────┬───────────┘
               ▼
    ┌──────────────────────┐
@@ -138,29 +143,21 @@ highlightr has no dependency on them and works with any transcript source.
 highlightr talks to any OpenAI-compatible API. Point it at your backend:
 
 ```bash
-export LLM_BASE_URL="http://localhost:8080/v1"   # local llama-server on the same host
-export LLM_MODEL="gemma4"
+export LLM_BASE_URL="http://localhost:8080/v1"   # local Python -> llama-server on the same host
+export LLM_MODEL="your-model"
 # export LLM_API_KEY="sk-..."   # only if your backend requires auth
 ```
 
 Under the hood it POSTs to `{LLM_BASE_URL}/chat/completions` using structured
-outputs (`response_format: json_schema`) and parses the JSON returned in the
-assistant message.
-
-Each request contains transcript text or excerpts derived from it. The default
-configuration uses a local llama-server; if you configure a hosted endpoint,
-that provider receives the request content. RipeClips never sends the source
-audio or video to the LLM. See [`../PROMPTS.md`](../PROMPTS.md) for the exact
-system and user prompt templates and the data inserted into them.
+outputs (`response_format: json_schema`). Responses are decoded strictly and
+validated against Pydantic contracts before any candidate data reaches the
+selection pipeline.
 
 
 - [`llama-server`](https://github.com/ggml-org/llama.cpp/tree/master/tools/server)
 
-  Get a compatible GGUF from the [Unsloth Gemma 4 Hugging Face
-  collection](https://huggingface.co/collections/unsloth/gemma-4).
-
   ```bash
-  # llama-server -m /path/to/gemma4.gguf --host 0.0.0.0 --port 8080  (started separately)
+  # llama-server -m gemma4.gguf --port 8080  (started separately)
   LLM_BASE_URL="http://host.docker.internal:8080/v1" \
   LLM_MODEL="gemma4" \
     docker compose up --build
@@ -216,7 +213,7 @@ system and user prompt templates and the data inserted into them.
 **Locally:**
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
 uvicorn app.main:app --reload
 ```
 
@@ -224,7 +221,7 @@ uvicorn app.main:app --reload
 
 ```bash
 LLM_BASE_URL="http://host.docker.internal:8080/v1" \
-LLM_MODEL="gemma4" \
+LLM_MODEL="your-model" \
 docker compose up --build
 ```
 
@@ -243,12 +240,37 @@ The API listens on `http://localhost:8000`. Interactive docs are at
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET`  | `/health` | Liveness check |
+| `GET`  | `/ready` | Validated LLM endpoint/model configuration, with secrets omitted |
 | `POST` | `/v2/highlights/identify` | Identify highlights from a JSON transcript |
 | `POST` | `/v2/highlights/identify-srt` | Identify highlights from an uploaded `.srt` |
 | `POST` | `/v2/highlights/jobs` | Start an async job from a JSON transcript |
 | `POST` | `/v2/highlights/srt-jobs` | Start an async job from an uploaded `.srt` |
 | `GET`  | `/v2/highlights/jobs/{job_id}` | Poll job status and progress |
 | `GET`  | `/v2/highlights/jobs/{job_id}/result` | Fetch the completed result |
+| `POST` | `/v2/clips/metadata-srt` | Write publishing metadata for an uploaded `.srt` that is already one clip |
+
+The bundled job store is intentionally local and in-memory. Jobs have a
+configurable TTL and capacity limit, but they do not survive process restarts
+or span multiple Uvicorn workers. The `JobStore` boundary can be replaced with
+a persistent implementation when deployment requires those guarantees.
+
+### Write post copy for a clip you already have
+
+When the clip is already cut, discovery and ranking have nothing left to do.
+`/v2/clips/metadata-srt` treats the whole uploaded SRT as a single clip and runs
+only the metadata stage — the same prompt, word-limit retry, and fallbacks that
+selected highlights go through — returning one `HighlightClip` plus the LLM call
+count. Scores are left at zero because no span was chosen. It is synchronous:
+one metadata call, no job to poll. The `llm_endpoint`, `llm_model`,
+`llm_api_key`, and `llm_compatibility_mode` form fields work exactly as they do
+on `/v2/highlights/identify-srt`.
+
+```bash
+curl -X POST http://localhost:8000/v2/clips/metadata-srt \
+  -F 'file=@clip.srt' \
+  -F 'title=Candace Owens vs Andrew Wilson: The Great Debate.' \
+  -F 'language=en'
+```
 
 ### Identify highlights from a transcript
 
@@ -258,6 +280,7 @@ curl -X POST http://localhost:8000/v2/highlights/identify \
   -d '{
     "transcript": {
       "source_id": "episode_abc123",
+      "title": "Candace Owens vs Andrew Wilson: The Great Debate.",
       "language": "en",
       "rows": [
         {"id": 0, "start_seconds": 0, "end_seconds": 35, "speaker": "Host",
@@ -322,6 +345,7 @@ Every identify call returns the same shape: a ranked list of `clips`, the
 ```json
 {
   "source_id": "episode_abc123",
+  "title": "Candace Owens vs Andrew Wilson: The Great Debate.",
   "clips": [
     {
       "clip_id": "clip_001",
@@ -334,9 +358,35 @@ Every identify call returns the same shape: a ranked list of `clips`, the
       "title": "Everyone saw it coming",
       "summary": "The guest explains why an obvious problem went unaddressed for years.",
       "reason": "Self-contained setup and payoff with a surprising turn. Global ranking: strongest standalone moment.",
+      "title_string": "The guest and an overlooked problem",
+      "best_headlines": [
+        "Everyone Saw the Problem Coming",
+        "Why Nobody Changed Course in Time",
+        "The Warning Everyone Ignored"
+      ],
+      "best_headline": "Everyone Saw the Problem Coming",
+      "best_questions": [
+        "Why did nobody change course?",
+        "How were the warnings ignored?",
+        "Everyone saw this coming"
+      ],
+      "best_question": "Why did nobody change course?",
+      "best_description": "The guest explains how a widely recognized problem persisted because nobody changed course despite years of warning signs.",
+      "best_quotes": [
+        "everyone saw it coming",
+        "nobody changed course",
+        "that is when it finally changed"
+      ],
+      "hashtags": "debate, warning signs, decision making",
+      "keywords": "ignored warnings, institutional decisions, changing course",
+      "category": {
+        "primary": "insight",
+        "secondary": null
+      },
       "scores": {
         "overall": 0.91,
         "interestingness": 0.93,
+        "shareability": 0.9,
         "self_contained": 0.88,
         "boundary_quality": 0.86,
         "topic_relevance": 0.95,
@@ -367,7 +417,9 @@ Every identify call returns the same shape: a ranked list of `clips`, the
     "mode": "llm_structured",
     "version": "ripe-clips",
     "discovery_window_seconds": 1200,
-    "stride_seconds": 300
+    "stride_seconds": 300,
+    "prompt_tokens": 84213,
+    "completion_tokens": 6120
   }
 }
 ```
@@ -376,6 +428,18 @@ Every identify call returns the same shape: a ranked list of `clips`, the
 came from, and `anchors` hold the verbatim quotes used to score recovery
 confidence. Feed this JSON straight into `splice_highlights.py` to cut the
 clips.
+
+The top-level `title` is supplied by the caller (and falls back to `source_id`).
+After final clip selection, one additional structured LLM call creates publishing
+metadata for every selected clip. `best_quotes` are checked against the clip
+transcript, `best_headline` is checked against `best_headlines`, `best_question`
+is checked against `best_questions`, and malformed metadata falls back to the
+existing title and summary without discarding a clip.
+During this pass, `summary` is rewritten as a short, cheeky one-liner and
+normalized to lowercase.
+The LLM supplies `best_description` as individual sentences internally; the
+saved string inserts two newline characters between paragraphs, alternating
+between groups of two and three sentences.
 
 ---
 
@@ -387,9 +451,10 @@ JSON API, flags on the test script):
 - **`style`** — free-form preference string passed to the LLM.
 - **`topics`** — themes to focus on. In the JSON API this is a list; the `.srt`
   endpoints accept a comma-separated form field.
-- **`topic_policy`** — `soft` (prefer topics, allow exceptional off-topic
-  clips), `hard` (must substantially address a topic), or `only` (reject
-  anything not centered on a topic).
+- **`topic_policy`** — `soft` prefers topics but permits exceptional off-topic
+  clips. `hard` independently verifies every candidate and keeps only direct
+  or materially related matches. The legacy `only` value is accepted as an
+  alias for `hard`.
 - **`admission_strictness`** — the minimum score a candidate needs to be
   admitted (0–1).
 - **`min_candidates_per_window`** — allow lower-scoring fallback candidates per
@@ -400,8 +465,7 @@ The test script bundles these into `--discovery-mode` presets:
 | Preset | Behavior |
 | --- | --- |
 | `best_only` | Strict, broad highlight discovery |
-| `topic_focused` | Require substantial topic relevance |
-| `topic_only` | Reject clips not centered on the topics |
+| `topic_focused` | Return only independently verified topic-related clips |
 | `coverage` | Prefer at least one usable candidate per window |
 | `research_sweep` | Broadest mode, for review and debugging |
 
@@ -434,18 +498,41 @@ override these.
 
 For Docker, copy [`.env.example`](.env.example) to `.env` and adjust as needed.
 For local Python runs, export the same variables in your shell. Every variable
-is optional and falls back to a built-in default.
+is optional and falls back to the validated defaults defined in
+`app/config.py`. Docker Compose only forwards overrides; it does not maintain a
+second set of defaults.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `LLM_BASE_URL` | `http://localhost:8080/v1` | Base URL of an OpenAI-compatible API (should end in `/v1`) |
-| `LLM_MODEL` | `gemma4` | Model name passed through to the backend |
+| `LLM_BASE_URL` | `http://localhost:7777/v1` | Base URL of an OpenAI-compatible API (should end in `/v1`) |
+| `LLM_MODEL` | unset | Optional model name passed through to the backend |
 | `LLM_API_KEY` | *(unset)* | Optional bearer token; leave unset for local backends |
+| `LLM_REQUIRE_API_KEY` | `false` | Fail startup when no API key is configured |
 | `LLM_TIMEOUT_SECONDS` | `180` | Per-request timeout for each chat completion call |
+| `LLM_MAX_RETRIES` | `2` | Retries for HTTP 429/5xx, connection failures, and timeouts |
+| `LLM_RETRY_INITIAL_SECONDS` | `3` | Initial exponential-backoff delay |
+| `LLM_RETRY_MULTIPLIER` | `3` | Backoff multiplier |
+| `LLM_RETRY_MAX_SECONDS` | `60` | Maximum backoff delay |
+| `LLM_RETRY_JITTER_SECONDS` | `0.5` | Maximum random jitter added to a retry |
+| `LLM_MAX_CONCURRENCY` | `1` | Maximum independent discovery windows processed concurrently |
+| `LLM_GLOBAL_CONCURRENCY` | `4` | Process-wide cap on in-flight LLM requests across all jobs |
+| `LLM_MAX_PROMPT_CHARS` | `120000` | Hard request-size guardrail |
+| `LLM_RANKING_BATCH_SIZE` | `40` | Maximum candidates per tournament-ranking request |
+| `LLM_METADATA_BATCH_SIZE` | `8` | Maximum selected clips per metadata request |
+| `JOB_TTL_SECONDS` | `86400` | In-memory job retention after the latest update |
+| `MAX_JOBS` | `500` | Maximum retained jobs; terminal jobs are evicted first |
+| `MAX_SRT_UPLOAD_BYTES` | `10485760` | Maximum uploaded SRT size |
+| `CORS_ORIGINS` | local Tauri/web ports | Comma-separated allowed browser origins |
 | `HIGHLIGHTS_INPUT_ROOT` | `./input` | Fallback media root for `splice_highlights.py` when result JSON has no `_local` paths |
 
 > ⚠️ Set `LLM_BASE_URL` (and `LLM_MODEL`) to a backend you can actually reach
 > before running — nothing works until the endpoint responds.
+
+Discovery calls can run concurrently when `LLM_MAX_CONCURRENCY` is greater
+than one. Global ranking uses tournament batches, and publishing metadata is
+batched independently. All requests remain under `LLM_MAX_PROMPT_CHARS`; an
+individual discovery window that cannot fit fails with an explicit provider
+request error instead of silently truncating transcript rows.
 
 ---
 
@@ -454,11 +541,19 @@ is optional and falls back to a built-in default.
 ```
 .
 ├── app/
-│   ├── main.py         # FastAPI app: endpoints, async job orchestration
-│   ├── highlights.py   # core engine: windowing, discovery, ranking, selection
-│   ├── llm.py          # OpenAI-compatible chat/completions client with retries
-│   ├── models.py       # Pydantic request/response schemas
-│   └── srt.py          # SRT parsing into transcript rows
+│   ├── config.py               # validated environment settings
+│   ├── highlight_candidates.py # transcript windows and candidate recovery
+│   ├── highlight_contracts.py  # typed LLM response contracts
+│   ├── highlight_metadata.py   # publishing metadata normalization/fallbacks
+│   ├── highlight_prompts.py    # discovery, ranking, and metadata prompts
+│   ├── highlight_selection.py  # dedupe, scoring, and overlap selection
+│   ├── highlights.py           # pipeline orchestration and batching
+│   ├── jobs.py                 # typed bounded/expiring JobStore
+│   ├── llm.py                  # injectable OpenAI-compatible client
+│   ├── main.py                 # FastAPI app factory and endpoints
+│   ├── models.py               # public request/response schemas
+│   ├── srt.py                  # SRT parsing into transcript rows
+│   └── version.py              # shared package/API/client version
 ├── scripts/
 │   ├── test_identify_srt.py   # upload an SRT, poll a job, save result JSON
 │   └── splice_highlights.py   # cut MP4 clips (+ shifted SRT) from a result
@@ -466,7 +561,9 @@ is optional and falls back to a built-in default.
 ├── util.py             # frame-accurate ffmpeg trimming helper
 ├── Dockerfile
 ├── docker-compose.yml
-└── requirements.txt
+├── pyproject.toml
+├── requirements.txt            # editable runtime install compatibility
+└── requirements-dev.txt        # editable install with test/lint/type tools
 ```
 
 ---
@@ -474,11 +571,14 @@ is optional and falls back to a built-in default.
 ## Testing
 
 ```bash
-pip install -r requirements.txt
+pip install -e ".[dev]"
 pytest
+ruff check .
+mypy app
 ```
 
-The suite covers SRT parsing, scoring/selection logic, request/response models,
-the LLM client, and timestamp helpers used by the ffmpeg trimming flow.
+The suite covers API and job lifecycles, validated configuration, transport
+retries, malformed provider responses, concurrency and batching, SRT parsing,
+selection logic, public models, and timestamp helpers.
 
 ---

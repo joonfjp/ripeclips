@@ -18,7 +18,7 @@ With comma-separated topics:
 With a discovery preset:
     python3 highlightr/scripts/test_identify_srt.py /path/to/episode.srt \
       --topics "AI strategy, pricing" \
-      --discovery-mode topic_only
+      --discovery-mode topic_focused
 
 For a quick synchronous smoke test:
     python3 highlightr/scripts/test_identify_srt.py /path/to/short.srt --sync
@@ -35,9 +35,8 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
-from urllib.error import HTTPError, URLError
 from urllib import request
-
+from urllib.error import HTTPError, URLError
 
 DISCOVERY_MODE_PRESETS = {
     "best_only": {
@@ -47,12 +46,7 @@ DISCOVERY_MODE_PRESETS = {
     },
     "topic_focused": {
         "topic_policy": "hard",
-        "admission_strictness": "0.75",
-        "min_candidates_per_window": "0",
-    },
-    "topic_only": {
-        "topic_policy": "only",
-        "admission_strictness": "0.85",
+        "admission_strictness": "0.65",
         "min_candidates_per_window": "0",
     },
     "coverage": {
@@ -392,8 +386,8 @@ def build_multipart(
     for name, value in fields.items():
         chunks.extend(
             [
-                f"--{boundary}\r\n".encode("utf-8"),
-                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"),
+                f"--{boundary}\r\n".encode(),
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode(),
                 str(value).encode("utf-8"),
                 b"\r\n",
             ]
@@ -402,15 +396,15 @@ def build_multipart(
     content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
     chunks.extend(
         [
-            f"--{boundary}\r\n".encode("utf-8"),
+            f"--{boundary}\r\n".encode(),
             (
                 f'Content-Disposition: form-data; name="{file_field}"; '
                 f'filename="{file_path.name}"\r\n'
-            ).encode("utf-8"),
-            f"Content-Type: {content_type}\r\n\r\n".encode("utf-8"),
+            ).encode(),
+            f"Content-Type: {content_type}\r\n\r\n".encode(),
             file_path.read_bytes(),
             b"\r\n",
-            f"--{boundary}--\r\n".encode("utf-8"),
+            f"--{boundary}--\r\n".encode(),
         ]
     )
 

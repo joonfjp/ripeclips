@@ -1,15 +1,37 @@
 from __future__ import annotations
 
-import threading
-import uuid
+import logging
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from .highlights import identify_highlights, resolve_window_and_stride
+from .config import AppSettings, LLMSettings, get_settings
+from .highlight_candidates import plan_highlight_windows
+from .highlights import generate_clip_metadata, identify_highlights
+from .jobs import (
+    InMemoryJobStore,
+    JobNotFoundError,
+    JobRecord,
+    JobStore,
+    JobStoreFullError,
+)
+from .llm import LLMClient, LLMError
 from .models import (
+    ClipMetadataResult,
     HighlightResult,
     IdentifyHighlightsRequest,
     JobProgress,
@@ -19,45 +41,71 @@ from .models import (
     Transcript,
 )
 from .srt import decode_srt_bytes, parse_srt
+from .version import __version__
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
 
 
-app = FastAPI(
-    title="Ripe Clips API",
-    version="0.1.0",
-    description="Row-backed highlight identification for long-form transcripts.",
-)
+def create_app(
+    *,
+    settings: AppSettings | None = None,
+    llm_client: LLMClient | None = None,
+    job_store: JobStore | None = None,
+) -> FastAPI:
+    configured_settings = settings or get_settings()
+    api = FastAPI(
+        title="Ripe Clips API",
+        version=__version__,
+        description="Row-backed highlight identification for long-form transcripts.",
+    )
+    api.state.settings = configured_settings
+    api.state.llm_client = llm_client or LLMClient(configured_settings.llm)
+    api.state.job_store = job_store or InMemoryJobStore(
+        ttl_seconds=configured_settings.job_ttl_seconds,
+        max_jobs=configured_settings.max_jobs,
+    )
+    api.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(configured_settings.cors_origins),
+        allow_credentials=False,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type"],
+    )
 
-# The browser app may run on either local development port. Tauri's native HTTP
-# client does not need CORS, but allowing these local origins keeps both paths
-# working without exposing the API to arbitrary websites.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:1420",
-        "http://127.0.0.1:1420",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
-    allow_credentials=False,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
-)
+    @api.exception_handler(LLMError)
+    async def handle_llm_error(_request: Request, error: LLMError) -> JSONResponse:
+        return JSONResponse(status_code=502, content={"detail": str(error)})
 
-_jobs: dict[str, dict[str, object]] = {}
-_jobs_lock = threading.Lock()
+    api.include_router(router)
+    return api
 
 
-@app.get("/health")
+@router.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "version": __version__}
 
 
-@app.post("/v2/highlights/identify", response_model=HighlightResult)
-def identify(request: IdentifyHighlightsRequest) -> HighlightResult:
-    try:
-        return identify_highlights(request)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+@router.get("/ready")
+def ready(request: Request) -> dict[str, str | bool | None]:
+    settings: AppSettings = request.app.state.settings
+    return {
+        "status": "ready",
+        "configured": True,
+        "llm_base_url": settings.llm.base_url,
+        "llm_model": settings.llm.model,
+    }
+
+
+@router.post("/v2/highlights/identify", response_model=HighlightResult)
+def identify(
+    payload: IdentifyHighlightsRequest,
+    request: Request,
+) -> HighlightResult:
+    return identify_highlights(
+        payload,
+        llm_client=request.app.state.llm_client,
+    )
 
 
 def _parse_topics(value: str | None) -> list[str]:
@@ -66,9 +114,66 @@ def _parse_topics(value: str | None) -> list[str]:
     return [topic.strip() for topic in value.split(",") if topic.strip()]
 
 
+def _apply_llm_override(
+    request: Request,
+    *,
+    llm_endpoint: str | None,
+    llm_model: str | None,
+    llm_api_key: str | None,
+    llm_compatibility_mode: str | None,
+) -> None:
+    if llm_endpoint is None:
+        return
+    settings: AppSettings = request.app.state.settings
+    compatibility = (llm_compatibility_mode or "openai").strip().lower()
+    if compatibility not in {"openai", "openrouter", "generic"}:
+        raise HTTPException(status_code=400, detail="Unsupported LLM compatibility mode")
+    try:
+        values = settings.llm.model_dump()
+        values.update(
+            base_url=llm_endpoint,
+            model=llm_model,
+            api_key=llm_api_key or "",
+            require_api_key=False,
+        )
+        request.state.llm_client = LLMClient(LLMSettings.model_validate(values))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=f"Invalid LLM provider: {error}") from error
+
+
+async def _read_srt_transcript(
+    request: Request,
+    file: UploadFile,
+    *,
+    source_id: str | None,
+    title: str | None,
+    language: str | None,
+) -> Transcript:
+    settings: AppSettings = request.app.state.settings
+    raw = await file.read(settings.max_srt_upload_bytes + 1)
+    if len(raw) > settings.max_srt_upload_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"SRT upload exceeds the {settings.max_srt_upload_bytes:,}-byte limit"
+            ),
+        )
+    rows = parse_srt(decode_srt_bytes(raw))
+    if not rows:
+        raise HTTPException(status_code=400, detail="No caption rows found in SRT file")
+    return Transcript(
+        source_id=source_id or Path(file.filename or "uploaded.srt").stem,
+        title=title,
+        language=language,
+        rows=rows,
+    )
+
+
 async def _build_request_from_srt_upload(
-    file: UploadFile = File(...),
+    request: Request,
+    file: Annotated[UploadFile, File()],
     source_id: str | None = Form(default=None),
+    title: str | None = Form(default=None),
     language: str | None = Form(default=None),
     max_clip_duration_seconds: int = Form(default=1200),
     min_clip_duration_seconds: int = Form(default=60),
@@ -84,17 +189,25 @@ async def _build_request_from_srt_upload(
     stride_seconds: int | None = Form(default=None),
     candidates_per_window: int = Form(default=5),
     dedupe_overlap_threshold: float = Form(default=0.65),
+    llm_endpoint: str | None = Form(default=None),
+    llm_model: str | None = Form(default=None),
+    llm_api_key: str | None = Form(default=None),
+    llm_compatibility_mode: str | None = Form(default=None),
 ) -> IdentifyHighlightsRequest:
-    raw = await file.read()
-    rows = parse_srt(decode_srt_bytes(raw))
-    if not rows:
-        raise HTTPException(status_code=400, detail="No caption rows found in SRT file")
-
+    _apply_llm_override(
+        request,
+        llm_endpoint=llm_endpoint,
+        llm_model=llm_model,
+        llm_api_key=llm_api_key,
+        llm_compatibility_mode=llm_compatibility_mode,
+    )
     return IdentifyHighlightsRequest(
-        transcript=Transcript(
-            source_id=source_id or Path(file.filename or "uploaded.srt").stem,
+        transcript=await _read_srt_transcript(
+            request,
+            file,
+            source_id=source_id,
+            title=title,
             language=language,
-            rows=rows,
         ),
         selection=SelectionOptions(
             max_clip_duration_seconds=max_clip_duration_seconds,
@@ -104,7 +217,7 @@ async def _build_request_from_srt_upload(
             target=target,
             style=style,
             topics=_parse_topics(topics),
-            topic_policy=topic_policy,  # type: ignore[arg-type]
+            topic_policy=topic_policy,
             admission_strictness=admission_strictness,
             min_candidates_per_window=min_candidates_per_window,
         ),
@@ -120,76 +233,132 @@ async def _build_request_from_srt_upload(
 SrtRequest = Annotated[IdentifyHighlightsRequest, Depends(_build_request_from_srt_upload)]
 
 
-@app.post("/v2/highlights/identify-srt", response_model=HighlightResult)
-def identify_srt(identify_request: SrtRequest) -> HighlightResult:
-    try:
-        return identify_highlights(identify_request)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+@router.post("/v2/highlights/identify-srt", response_model=HighlightResult)
+def identify_srt(
+    identify_request: SrtRequest,
+    request: Request,
+) -> HighlightResult:
+    return identify_highlights(
+        identify_request,
+        llm_client=getattr(request.state, "llm_client", request.app.state.llm_client),
+    )
 
 
-@app.post("/v2/highlights/srt-jobs", response_model=JobStatus, status_code=202)
+@router.post("/v2/clips/metadata-srt", response_model=ClipMetadataResult)
+async def clip_metadata_srt(
+    request: Request,
+    file: Annotated[UploadFile, File()],
+    source_id: str | None = Form(default=None),
+    title: str | None = Form(default=None),
+    language: str | None = Form(default=None),
+    llm_endpoint: str | None = Form(default=None),
+    llm_model: str | None = Form(default=None),
+    llm_api_key: str | None = Form(default=None),
+    llm_compatibility_mode: str | None = Form(default=None),
+) -> ClipMetadataResult:
+    """Generate post copy for an SRT that already covers exactly one clip."""
+    _apply_llm_override(
+        request,
+        llm_endpoint=llm_endpoint,
+        llm_model=llm_model,
+        llm_api_key=llm_api_key,
+        llm_compatibility_mode=llm_compatibility_mode,
+    )
+    transcript = await _read_srt_transcript(
+        request,
+        file,
+        source_id=source_id,
+        title=title,
+        language=language,
+    )
+    llm_client = getattr(request.state, "llm_client", request.app.state.llm_client)
+    return await run_in_threadpool(
+        generate_clip_metadata,
+        transcript,
+        llm_client=llm_client,
+    )
+
+
+@router.post("/v2/highlights/srt-jobs", response_model=JobStatus, status_code=202)
 def create_srt_job(
     identify_request: SrtRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
 ) -> JobStatus:
-    return _create_job(identify_request, background_tasks)
+    return _create_job(
+        identify_request,
+        background_tasks,
+        store=request.app.state.job_store,
+        llm_client=getattr(request.state, "llm_client", request.app.state.llm_client),
+    )
 
 
-@app.post("/v2/highlights/jobs", response_model=JobStatus, status_code=202)
+@router.post("/v2/highlights/jobs", response_model=JobStatus, status_code=202)
 def create_job(
-    request: IdentifyHighlightsRequest,
+    payload: IdentifyHighlightsRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
 ) -> JobStatus:
-    return _create_job(request, background_tasks)
+    return _create_job(
+        payload,
+        background_tasks,
+        store=request.app.state.job_store,
+        llm_client=request.app.state.llm_client,
+    )
 
 
 def _create_job(
     request: IdentifyHighlightsRequest,
     background_tasks: BackgroundTasks,
+    *,
+    store: JobStore,
+    llm_client: LLMClient,
 ) -> JobStatus:
-    job_id = f"job_{uuid.uuid4().hex[:12]}"
-    total_windows = _estimate_window_count(request)
-    status = JobStatus(
-        job_id=job_id,
-        status="queued",
-        stage="queued",
-        progress=JobProgress(windows_done=0, windows_total=total_windows),
+    try:
+        status = store.create(_estimate_window_count(request))
+    except JobStoreFullError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    background_tasks.add_task(
+        _run_job,
+        status.job_id,
+        request,
+        store,
+        llm_client,
     )
-
-    with _jobs_lock:
-        _jobs[job_id] = {"status": status, "result": None}
-
-    background_tasks.add_task(_run_job, job_id, request)
     return status
 
 
-@app.get("/v2/highlights/jobs/{job_id}", response_model=JobStatus)
-def get_job(job_id: str) -> JobStatus:
-    job = _get_job(job_id)
-    return job["status"]  # type: ignore[return-value]
+@router.get("/v2/highlights/jobs/{job_id}", response_model=JobStatus)
+def get_job(job_id: str, request: Request) -> JobStatus:
+    try:
+        return request.app.state.job_store.get_status(job_id)
+    except JobNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Job not found") from exc
 
 
-@app.get("/v2/highlights/jobs/{job_id}/result", response_model=HighlightResult)
-def get_job_result(job_id: str) -> HighlightResult:
-    job = _get_job(job_id)
-    status = job["status"]
-    if not isinstance(status, JobStatus):
-        raise HTTPException(status_code=500, detail="Job state is corrupt")
-    if status.status == "failed":
-        raise HTTPException(status_code=500, detail=status.error or "Job failed")
-    if status.status != "completed":
+@router.get("/v2/highlights/jobs/{job_id}/result", response_model=HighlightResult)
+def get_job_result(job_id: str, request: Request) -> HighlightResult:
+    record = _get_job_record(request.app.state.job_store, job_id)
+    if record.status.status == "failed":
+        raise HTTPException(
+            status_code=500,
+            detail=record.status.error or "Job failed",
+        )
+    if record.status.status != "completed":
         raise HTTPException(status_code=409, detail="Job is not complete")
-
-    result = job.get("result")
-    if not isinstance(result, HighlightResult):
+    if record.result is None:
         raise HTTPException(status_code=500, detail="Job result is missing")
-    return result
+    return record.result
 
 
-def _run_job(job_id: str, request: IdentifyHighlightsRequest) -> None:
+def _run_job(
+    job_id: str,
+    request: IdentifyHighlightsRequest,
+    store: JobStore,
+    llm_client: LLMClient,
+) -> None:
     total_windows = _estimate_window_count(request)
-    _set_job_status(
+    store.set_status(
         job_id,
         JobStatus(
             job_id=job_id,
@@ -200,8 +369,9 @@ def _run_job(job_id: str, request: IdentifyHighlightsRequest) -> None:
     )
 
     try:
+
         def update_progress(done: int, total: int, stage: str) -> None:
-            _set_job_status(
+            store.set_status(
                 job_id,
                 JobStatus(
                     job_id=job_id,
@@ -211,73 +381,44 @@ def _run_job(job_id: str, request: IdentifyHighlightsRequest) -> None:
                 ),
             )
 
-        result = identify_highlights(request, progress_callback=update_progress)
-    except Exception as exc:  # pragma: no cover - defensive job boundary
-        current_progress = _current_job_progress(job_id, total_windows)
-        _set_job_status(
-            job_id,
-            JobStatus(
-                job_id=job_id,
-                status="failed",
-                stage="failed",
-                progress=current_progress,
-                error=str(exc),
-            ),
+        result = identify_highlights(
+            request,
+            progress_callback=update_progress,
+            llm_client=llm_client,
         )
+    except Exception as exc:  # pragma: no cover - defensive job boundary
+        logger.exception("Highlight job failed job_id=%s", job_id)
+        try:
+            current_progress = store.get_status(job_id).progress
+            store.set_status(
+                job_id,
+                JobStatus(
+                    job_id=job_id,
+                    status="failed",
+                    stage="failed",
+                    progress=current_progress,
+                    error=str(exc),
+                ),
+            )
+        except JobNotFoundError:
+            logger.warning("Failed job expired before status update job_id=%s", job_id)
         return
 
-    with _jobs_lock:
-        job = _jobs[job_id]
-        job["result"] = result
-        job["status"] = JobStatus(
-            job_id=job_id,
-            status="completed",
-            stage="completed",
-            progress=JobProgress(
-                windows_done=result.processing_summary.window_count,
-                windows_total=result.processing_summary.window_count,
-            ),
-        )
+    try:
+        store.complete(job_id, result)
+    except JobNotFoundError:
+        logger.warning("Completed job expired before result storage job_id=%s", job_id)
 
 
-def _get_job(job_id: str) -> dict[str, object]:
-    with _jobs_lock:
-        job = _jobs.get(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return job
-
-
-def _set_job_status(job_id: str, status: JobStatus) -> None:
-    with _jobs_lock:
-        if job_id in _jobs:
-            _jobs[job_id]["status"] = status
-
-
-def _current_job_progress(job_id: str, fallback_total: int) -> JobProgress:
-    with _jobs_lock:
-        job = _jobs.get(job_id)
-        status = job.get("status") if job else None
-    if isinstance(status, JobStatus):
-        return status.progress
-    return JobProgress(windows_done=0, windows_total=fallback_total)
+def _get_job_record(store: JobStore, job_id: str) -> JobRecord:
+    try:
+        return store.get(job_id)
+    except JobNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Job not found") from exc
 
 
 def _estimate_window_count(request: IdentifyHighlightsRequest) -> int:
-    rows = request.transcript.rows
-    if not rows:
-        return 0
+    return len(plan_highlight_windows(request))
 
-    transcript_start = min(row.start_seconds for row in rows)
-    transcript_end = max(row.end_seconds for row in rows)
-    duration = max(0.0, transcript_end - transcript_start)
-    window, stride = resolve_window_and_stride(
-        request.selection.max_clip_duration_seconds,
-        request.processing.discovery_window_seconds,
-        request.processing.stride_seconds,
-    )
-    if duration <= 0:
-        return 0
-    if duration <= window:
-        return 1
-    return int((duration - window + stride - 1) // stride) + 1
+
+app = create_app()

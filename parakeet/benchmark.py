@@ -95,7 +95,8 @@ def find_service_pid() -> int:
     for proc in psutil.process_iter(["pid", "name", "cmdline"]):
         try:
             cmdline = proc.info["cmdline"]
-            if cmdline and "app.py" in " ".join(cmdline):
+            command = " ".join(cmdline or [])
+            if "server.py" in command or "parakeet_service.main:app" in command:
                 return proc.info["pid"]
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue

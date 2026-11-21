@@ -23,21 +23,18 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install Python dependencies. requirements.txt is GPU-first, so the CPU image
-# swaps onnxruntime-gpu for onnxruntime.
+# uses CPU builds of ONNX Runtime and the PyTorch packages required by Silero VAD.
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchaudio && \
     grep -v '^onnxruntime-gpu' requirements.txt > /tmp/requirements.cpu.txt && \
-    pip install --no-cache-dir -r /tmp/requirements.cpu.txt && \
-    pip install --no-cache-dir onnxruntime==1.23.2
+    pip install --no-cache-dir -r /tmp/requirements.cpu.txt onnxruntime==1.23.2
 
 # Copy application code
-COPY server.py .
+COPY LICENSE server.py ./
 COPY parakeet_service/ parakeet_service/
-COPY app.py .
-COPY templates/ templates/
-COPY parakeet.png .
 
 # Create directories for runtime
-RUN mkdir -p temp_uploads models && \
+RUN mkdir -p models && \
     chown -R parakeet:parakeet /app
 
 # Switch to non-root user

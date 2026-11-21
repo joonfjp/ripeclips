@@ -17,8 +17,8 @@ This implementation achieves exceptional real-time speeds, outperforming standar
 ## 🚀 Optimized FastAPI service (v2)
 
 A refactored async service lives under [`parakeet_service/`](parakeet_service/)
-and is started via [`server.py`](server.py). It keeps the OpenAI-compatible
-contract of the legacy [`app.py`](app.py) but adds:
+and is started via [`server.py`](server.py). It keeps the upstream
+OpenAI-compatible contract while adding:
 
 - In-process audio decode (single `ffmpeg` per request, none per chunk)
 - **Silero-VAD auto-chunking** that splits long files on pause midpoints
@@ -151,10 +151,8 @@ ONNX Runtime's CPU execution provider automatically dispatches AVX2/FMA kernels 
 
 For hybrid CPUs (like Intel 12th-14th Gen), performance is still improved by pinning the process to Performance cores (P-cores). You can also override the auto-tuned defaults:
 
-* `PARAKEET_ORT_INTRA_THREADS`: ONNX Runtime intra-op worker threads. Defaults to the lower of detected physical CPUs and available logical CPUs in the container/affinity mask. Minimum: `1`.
+* `PARAKEET_ORT_INTRA_THREADS`: ONNX Runtime intra-op worker threads. On CPU, defaults to the lower of detected physical CPUs and available logical CPUs in the container/affinity mask, divided by the number of concurrent inference workers (`PARAKEET_INFER_WORKERS` when `PARAKEET_BATCHED=0`) so workers don't oversubscribe cores. Minimum: `1`.
 * `PARAKEET_ORT_INTER_THREADS`: ONNX Runtime inter-op threads. Defaults to `1`, which is best for single-model inference. Minimum: `1`.
-* `PARAKEET_WAITRESS_THREADS`: HTTP worker threads. Defaults to a conservative value to avoid oversubscribing ONNX Runtime's AVX2 worker pool. Minimum: `1`.
-
 ## Installation
 
 ### 🐳 Docker (Recommended)
@@ -168,11 +166,6 @@ cd parakeet-tdt-0.6b-v3-fastapi-openai
 docker compose up parakeet-cpu -d
 ```
 
-**GPU Deployment** (requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)):
-```bash
-docker compose up parakeet-gpu -d
-```
-
 The server will be available at `http://localhost:5092`. See [DOCKER.md](DOCKER.md) for more options.
 
 ---
@@ -184,10 +177,12 @@ For development or customization:
 ```bash
 conda create -n parakeet-onnx python=3.10
 conda activate parakeet-onnx
-git clone https://github.com/groxaxo/parakeet-tdt-0.6b-v3-fastapi-openai
-cd parakeet-tdt-0.6b-v3-fastapi-openai
+cd parakeet
 pip install -r requirements.txt
 ```
+
+Install `requirements-dev.txt` instead when running the optional benchmark
+script.
 
 ## Usage
 
@@ -197,7 +192,7 @@ Parakeet TDT provides an OpenAI-compatible API server.
 
 ```bash
 conda activate parakeet-onnx
-python app.py
+python server.py
 ```
 *   **Port**: 5092
 *   **Docs**: [http://127.0.0.1:5092/docs](http://127.0.0.1:5092/docs)
@@ -245,12 +240,10 @@ transcript = client.audio.transcriptions.create(
 )
 ```
 
-### Web Interface
+### API documentation
 
-The server includes a built-in web interface for testing and easy drag-and-drop transcription.
-Access it at: **[http://127.0.0.1:5092](http://127.0.0.1:5092)**
-
-The web interface includes a dropdown menu to select between INT8, FP16, and FP32 model variants.
+FastAPI serves interactive OpenAPI documentation at
+**http://127.0.0.1:5092/docs**.
 
 ## 🔌 Open WebUI Integration
 
@@ -261,7 +254,7 @@ The web interface includes a dropdown menu to select between INT8, FP16, and FP3
 1.  **Start the Parakeet Server** (if not already running):
     ```bash
     conda activate parakeet-onnx
-    python app.py
+    python server.py
     ```
     The server will be available at `http://127.0.0.1:5092`
 

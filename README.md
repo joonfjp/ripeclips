@@ -109,7 +109,7 @@ curl http://localhost:8000/health   # highlightr
 ```
 
 > See [`highlightr/README.md`](highlightr/README.md) for every tuning option and
-[`parakeet/README.md`](parakeet/README.md) for GPU deployment and model
+[`parakeet/README.md`](parakeet/README.md) for CPU deployment and model
 variants.
 
 Launch the native app:

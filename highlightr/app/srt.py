@@ -4,7 +4,6 @@ import re
 
 from .models import TranscriptRow
 
-
 TIME_RANGE_RE = re.compile(
     r"(?P<start>\d{1,2}:\d{2}:\d{2}[,.]\d{1,3})\s*-->\s*"
     r"(?P<end>\d{1,2}:\d{2}:\d{2}[,.]\d{1,3})"

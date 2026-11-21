@@ -7,7 +7,7 @@ services:
     build:
       context: ./parakeet
       dockerfile: Dockerfile.cpu
-    image: parakeet-tdt:cpu
+    image: joonfjp/parakeet:1.0.0
     container_name: parakeet-cpu
     environment:
       PARAKEET_USE_GPU: "false"
@@ -28,7 +28,7 @@ services:
   highlightr-api:
     build:
       context: ./highlightr
-    image: ripeclips-highlightr:latest
+    image: joonfjp/highlightr:1.0.0
     container_name: highlightr-api
     ports:
       - "127.0.0.1:8000:8000"

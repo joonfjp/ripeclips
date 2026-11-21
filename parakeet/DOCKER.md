@@ -15,27 +15,10 @@ docker build -f Dockerfile.cpu -t parakeet-tdt:cpu .
 docker run -d --name parakeet -p 5092:5092 -v parakeet-models:/app/models parakeet-tdt:cpu
 ```
 
-### GPU Deployment (Requires NVIDIA GPU)
-
-**Prerequisites:**
-- NVIDIA GPU with CUDA support
-- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
-
-```bash
-# Build and run with Docker Compose
-docker compose up parakeet-gpu -d
-
-# Or build manually
-docker build -f Dockerfile.gpu -t parakeet-tdt:gpu .
-docker run -d --name parakeet-gpu -p 5092:5092 --gpus all \
-    -v parakeet-models:/app/models parakeet-tdt:gpu
-```
-
 ## Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
-| `http://localhost:5092` | Web UI |
 | `http://localhost:5092/health` | Health check |
 | `http://localhost:5092/v1/audio/transcriptions` | OpenAI-compatible API |
 | `http://localhost:5092/docs` | Swagger documentation |
@@ -69,8 +52,7 @@ docker volume rm parakeet-models
 | File | Description |
 |------|-------------|
 | `Dockerfile.cpu` | CPU-only image (Python 3.10 slim) |
-| `Dockerfile.gpu` | NVIDIA CUDA 12.1 image with GPU support |
-| `docker-compose.yml` | Orchestration for both variants |
+| `docker-compose.yml` | Orchestration for the CPU image |
 | `.dockerignore` | Excludes unnecessary files from build |
 
 ## Testing
@@ -91,10 +73,5 @@ curl -X POST http://localhost:5092/v1/audio/transcriptions \
 - Check logs: `docker logs parakeet-cpu`
 - First startup takes ~60s to download the model
 
-**GPU not detected:**
-- Verify NVIDIA Container Toolkit: `nvidia-smi` should work inside container
-- Run: `docker run --rm --gpus all nvidia/cuda:12.1.1-base-ubuntu22.04 nvidia-smi`
-
 **Out of memory:**
 - CPU image requires ~2GB RAM
-- GPU image requires ~4GB VRAM

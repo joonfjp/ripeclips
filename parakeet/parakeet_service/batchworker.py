@@ -6,7 +6,6 @@ scales close to linear in time on CPU and is counter-productive there.
 """
 from __future__ import annotations
 import asyncio
-import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -14,10 +13,33 @@ from typing import Any, List, Optional
 
 import numpy as np
 
-from .config import MAX_BATCH_SIZE, BATCH_WINDOW_MS, logger
+from .config import (
+    BATCHED,
+    BATCH_WINDOW_MS,
+    INFER_WORKERS,
+    MAX_BATCH_SIZE,
+    MAX_QUEUE,
+    logger,
+)
 
-INFER_WORKERS = int(os.getenv("PARAKEET_INFER_WORKERS", "4"))
-BATCHED = os.getenv("PARAKEET_BATCHED", "1") == "1"
+
+class QueueFullError(RuntimeError):
+    """Raised when admitting more chunks would exceed the inference queue bound."""
+
+
+def _check_capacity(pending: int, incoming: int, limit: int) -> None:
+    # An idle server always admits one request, even if it alone exceeds the
+    # bound, so very long files are never permanently rejected.
+    if pending and pending + incoming > limit:
+        raise QueueFullError(
+            f"inference queue full ({pending} pending, limit {limit})"
+        )
+
+
+async def _resolve_model(get_model_fn, model_name: str):
+    # First use of a model may load it from disk; keep that off the event loop.
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, get_model_fn, model_name)
 
 
 @dataclass
@@ -30,9 +52,12 @@ class _Job:
 class InferencePool:
     """Default mode: parallel single-item ORT calls (CPU-friendly)."""
 
-    def __init__(self, get_model_fn, *, workers: int = INFER_WORKERS):
+    def __init__(self, get_model_fn, *, workers: int = INFER_WORKERS,
+                 max_queue: int = MAX_QUEUE):
         self._get_model = get_model_fn
         self._workers = max(1, workers)
+        self._max_queue = max_queue
+        self._pending = 0
         self._executor = ThreadPoolExecutor(
             max_workers=self._workers, thread_name_prefix="ort"
         )
@@ -45,27 +70,33 @@ class InferencePool:
         self._executor.shutdown(wait=False, cancel_futures=True)
 
     async def submit(self, wav: np.ndarray, model_name: str) -> Any:
-        loop = asyncio.get_running_loop()
-        model = self._get_model(model_name)
-        return await loop.run_in_executor(self._executor, model.recognize, wav)
+        return (await self.submit_many([wav], model_name))[0]
 
     async def submit_many(self, wavs: List[np.ndarray], model_name: str) -> List[Any]:
         if not wavs:
             return []
-        loop = asyncio.get_running_loop()
-        model = self._get_model(model_name)
-        tasks = [loop.run_in_executor(self._executor, model.recognize, w) for w in wavs]
-        return list(await asyncio.gather(*tasks))
+        _check_capacity(self._pending, len(wavs), self._max_queue)
+        self._pending += len(wavs)
+        try:
+            loop = asyncio.get_running_loop()
+            model = await _resolve_model(self._get_model, model_name)
+            tasks = [loop.run_in_executor(self._executor, model.recognize, w) for w in wavs]
+            return list(await asyncio.gather(*tasks))
+        finally:
+            self._pending -= len(wavs)
 
 
 class BatchWorker:
     """Cross-request micro-batching (recommended for GPU only)."""
 
     def __init__(self, get_model_fn, *, max_batch: int = MAX_BATCH_SIZE,
-                 window_ms: float = BATCH_WINDOW_MS):
+                 window_ms: float = BATCH_WINDOW_MS, max_queue: int = MAX_QUEUE):
         self._get_model = get_model_fn
         self._max_batch = max_batch
         self._window_s = window_ms / 1000.0
+        self._max_queue = max_queue
+        # Admission is bounded in submit*(); the queue itself stays unbounded so
+        # the worker can re-queue a mismatched job without blocking on itself.
         self._queue: asyncio.Queue[_Job] = asyncio.Queue()
         self._task: Optional[asyncio.Task] = None
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ort")
@@ -86,14 +117,13 @@ class BatchWorker:
         self._executor.shutdown(wait=False, cancel_futures=True)
 
     async def submit(self, wav: np.ndarray, model_name: str) -> Any:
-        job = _Job(wav=wav, model_name=model_name)
-        await self._queue.put(job)
-        return await job.future
+        return (await self.submit_many([wav], model_name))[0]
 
     async def submit_many(self, wavs: List[np.ndarray], model_name: str) -> List[Any]:
+        _check_capacity(self._queue.qsize(), len(wavs), self._max_queue)
         jobs = [_Job(wav=w, model_name=model_name) for w in wavs]
         for j in jobs:
-            await self._queue.put(j)
+            self._queue.put_nowait(j)
         return await asyncio.gather(*(j.future for j in jobs))
 
     async def _run(self) -> None:
@@ -120,7 +150,7 @@ class BatchWorker:
 
             wavs = [b.wav for b in batch]
             try:
-                model = self._get_model(first.model_name)
+                model = await _resolve_model(self._get_model, first.model_name)
                 results = await loop.run_in_executor(
                     self._executor, _infer_batch, model, wavs
                 )

@@ -4,6 +4,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+
 def trim_mp4_exact(
     input_path: str | Path,
     output_path: str | Path,

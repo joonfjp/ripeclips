@@ -1,134 +1,140 @@
 from __future__ import annotations
 
-import hashlib
-import re
-from dataclasses import dataclass, field
+import logging
+import threading
+from collections import deque
 from collections.abc import Callable
-from typing import Any
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from typing import Any, TypeVar, cast
 
-from .llm import call_llm_structured, extract_structured_output
+from pydantic import BaseModel
+
+from .highlight_candidates import (
+    Candidate,
+    Window,
+    _anchor,
+    _anchor_confidence,
+    _build_windows,
+    _candidate_from_llm_item,
+    _candidate_id,
+    _category_from_llm_item,
+    _clamp,
+    _clip_excerpt,
+    _float,
+    _norm,
+    _normalize_rows,
+    _smart_discovery_window,
+    _smart_stride,
+    _title_from_rows,
+    _words,
+    format_seconds,
+    plan_highlight_windows,
+    resolve_window_and_stride,
+)
+from .highlight_contracts import (
+    ClipMetadataResponse,
+    DiscoveryResponse,
+    GlobalRankResponse,
+    TopicVerificationResponse,
+)
+from .highlight_metadata import (
+    MAX_QUESTION_CHARS,
+    MAX_QUESTION_WORDS,
+    _apply_clip_metadata,
+    _fallback_hashtags,
+    _fallback_quotes,
+    _format_description,
+    _limit_words,
+    _metadata_exceeds_word_limit,
+    _normalize_csv,
+    _question_exceeds_limits,
+    _to_clip,
+    _unique_strings,
+)
+from .highlight_prompts import (
+    _build_clip_metadata_prompt,
+    _build_discovery_prompt,
+    _build_global_rank_prompt,
+    _build_topic_verification_prompt,
+    _topic_policy_rule,
+)
+from .highlight_selection import (
+    _calibrated_final_score,
+    _dedupe_candidates,
+    _is_topic_mismatch,
+    _overlap_ratio,
+    _overlap_seconds,
+    _select_non_overlapping,
+    _topic_filter_enabled,
+    _topic_selection_key,
+)
+from .llm import (
+    LLMClient,
+    LLMConnectionError,
+    LLMError,
+    LLMHTTPError,
+    LLMPromptTooLargeError,
+    LLMResponseError,
+    LLMResult,
+    get_default_llm_client,
+)
 from .models import (
-    Anchors,
-    ClipSource,
-    HighlightClip,
+    ClipMetadataResult,
     HighlightResult,
     IdentifyHighlightsRequest,
     ProcessingSummary,
     RejectedStats,
-    ScoreBreakdown,
-    TranscriptRow,
+    Transcript,
 )
+from .version import __version__
 
+logger = logging.getLogger(__name__)
 
-DISCOVERY_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "candidates": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "title": {"type": "string"},
-                    "summary": {"type": "string"},
-                    "reason": {"type": "string"},
-                    "start_row_id": {"type": "string"},
-                    "end_row_id": {"type": "string"},
-                    "start_anchor": {"type": "string"},
-                    "end_anchor": {"type": "string"},
-                    "interestingness": {"type": "number"},
-                    "self_contained": {"type": "number"},
-                    "boundary_quality": {"type": "number"},
-                    "topic_relevance": {"type": "number"},
-                    "overall": {"type": "number"},
-                },
-                "required": [
-                    "title",
-                    "summary",
-                    "reason",
-                    "start_row_id",
-                    "end_row_id",
-                    "start_anchor",
-                    "end_anchor",
-                    "interestingness",
-                    "self_contained",
-                    "boundary_quality",
-                    "topic_relevance",
-                    "overall",
-                ],
-                "additionalProperties": False,
-            },
-        }
-    },
-    "required": ["candidates"],
-    "additionalProperties": False,
-}
-
-GLOBAL_RANK_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "ranked_candidates": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "candidate_id": {"type": "string"},
-                    "global_score": {"type": "number"},
-                    "rank_reason": {"type": "string"},
-                },
-                "required": ["candidate_id", "global_score", "rank_reason"],
-                "additionalProperties": False,
-            },
-        }
-    },
-    "required": ["ranked_candidates"],
-    "additionalProperties": False,
-}
-
-
-@dataclass(slots=True)
-class Window:
-    id: str
-    start: float
-    end: float
-    rows: list[TranscriptRow]
-
-
-@dataclass(slots=True)
-class Candidate:
-    id: str
-    start: float
-    end: float
-    start_row: TranscriptRow
-    end_row: TranscriptRow
-    rows: list[TranscriptRow]
-    score: float
-    interestingness: float
-    self_contained: float
-    boundary_quality: float
-    topic_relevance: float
-    recovery_confidence: float
-    title: str = ""
-    summary: str = ""
-    reason: str = ""
-    start_anchor: str = ""
-    end_anchor: str = ""
-    window_ids: set[str] = field(default_factory=set)
-    candidate_ids: set[str] = field(default_factory=set)
-
-    @property
-    def duration(self) -> float:
-        return max(0.0, self.end - self.start)
-
+DISCOVERY_SCHEMA = DiscoveryResponse.model_json_schema()
+GLOBAL_RANK_SCHEMA = GlobalRankResponse.model_json_schema()
+TOPIC_VERIFICATION_SCHEMA = TopicVerificationResponse.model_json_schema()
+CLIP_METADATA_SCHEMA = ClipMetadataResponse.model_json_schema()
 
 ProgressCallback = Callable[[int, int, str], None]
+
+T = TypeVar("T", bound=BaseModel)
+
+
+class _UsageTrackingClient:
+    """Delegating LLM client that sums token usage across one highlight run.
+
+    Thread-safe because discovery fans calls out over a worker pool.
+    """
+
+    def __init__(self, inner: LLMClient):
+        self._inner = inner
+        self._lock = threading.Lock()
+        self.settings = inner.settings
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+
+    def call_structured(
+        self,
+        prompt: str,
+        response_model: type[T],
+        **kwargs: Any,
+    ) -> LLMResult[T]:
+        result = self._inner.call_structured(prompt, response_model, **kwargs)
+        usage = result.usage
+        with self._lock:
+            self.prompt_tokens += usage.prompt_tokens or 0
+            self.completion_tokens += usage.completion_tokens or 0
+        return result
 
 
 def identify_highlights(
     request: IdentifyHighlightsRequest,
     *,
     progress_callback: ProgressCallback | None = None,
+    llm_client: LLMClient | None = None,
 ) -> HighlightResult:
     rows = _normalize_rows(request.transcript.rows)
+    result_title = (request.transcript.title or "").strip() or request.transcript.source_id
     selection = request.selection
     processing = request.processing
     discovery_window_seconds, stride_seconds = resolve_window_and_stride(
@@ -138,26 +144,11 @@ def identify_highlights(
     )
 
     if not rows:
-        return HighlightResult(
-            source_id=request.transcript.source_id,
-            clips=[],
-            rejected=RejectedStats(
-                raw_candidates=0,
-                deduped_candidates=0,
-                removed_for_overlap=0,
-                removed_for_duration=0,
-                removed_for_low_confidence=0,
-                removed_for_low_score=0,
-                removed_for_topic_mismatch=0,
-            ),
-            processing_summary=ProcessingSummary(
-                window_count=0,
-                llm_calls=0,
-                mode="llm_structured",
-                version="ripe-clips",
-                discovery_window_seconds=discovery_window_seconds,
-                stride_seconds=stride_seconds,
-            ),
+        return _empty_result(
+            request,
+            result_title=result_title,
+            discovery_window_seconds=discovery_window_seconds,
+            stride_seconds=stride_seconds,
         )
 
     windows = _build_windows(
@@ -165,46 +156,35 @@ def identify_highlights(
         window_seconds=discovery_window_seconds,
         stride_seconds=stride_seconds,
     )
-    raw_candidates: list[Candidate] = []
+    usage = _UsageTrackingClient(llm_client or get_default_llm_client())
+    client = cast(LLMClient, usage)
+    warnings: list[str] = []
+    discovered, llm_calls = _discover_all_windows(
+        windows,
+        request=request,
+        llm_client=client,
+        progress_callback=progress_callback,
+        warnings=warnings,
+    )
+
+    candidate_pool: list[Candidate] = []
     removed_for_duration = 0
     removed_for_low_confidence = 0
     removed_for_low_score = 0
     removed_for_topic_mismatch = 0
-    llm_calls = 0
 
-    for index, window in enumerate(windows, 1):
-        candidates, calls = _discover_window_candidates_llm(
-            window,
-            candidates_per_window=processing.candidates_per_window,
-            min_duration=selection.min_clip_duration_seconds,
-            max_duration=selection.max_clip_duration_seconds,
-            style=selection.style or "",
-            target=selection.target,
-            topics=selection.topics,
-            topic_policy=selection.topic_policy,
-            admission_strictness=selection.admission_strictness,
-            min_candidates_per_window=selection.min_candidates_per_window,
-            language=request.transcript.language,
-        )
-        llm_calls += calls
+    for candidates in discovered:
         valid_candidates: list[Candidate] = []
         for candidate in candidates:
-            if candidate.duration < selection.min_clip_duration_seconds:
-                removed_for_duration += 1
-                continue
-            if candidate.duration > selection.max_clip_duration_seconds:
+            if not (
+                selection.min_clip_duration_seconds
+                <= candidate.duration
+                <= selection.max_clip_duration_seconds
+            ):
                 removed_for_duration += 1
                 continue
             if candidate.recovery_confidence < 0.5:
                 removed_for_low_confidence += 1
-                continue
-            if _is_topic_mismatch(
-                candidate,
-                topics=selection.topics,
-                topic_policy=selection.topic_policy,
-                admission_strictness=selection.admission_strictness,
-            ):
-                removed_for_topic_mismatch += 1
                 continue
             valid_candidates.append(candidate)
 
@@ -216,33 +196,93 @@ def identify_highlights(
             ):
                 removed_for_low_score += 1
                 continue
-            raw_candidates.append(candidate)
+            candidate_pool.append(candidate)
             admitted_from_window += 1
 
+    topic_focused = _topic_filter_enabled(
+        topics=selection.topics,
+        topic_policy=selection.topic_policy,
+    )
+    if topic_focused and candidate_pool:
         if progress_callback:
-            progress_callback(index, len(windows), "identifying")
+            progress_callback(len(windows), len(windows), "verifying_topics")
+        llm_calls += _verify_topic_candidates_llm(
+            candidate_pool,
+            selection.topics,
+            llm_client=client,
+        )
 
-    deduped = _dedupe_candidates(raw_candidates, processing.dedupe_overlap_threshold)
+    raw_candidates: list[Candidate] = []
+    for candidate in candidate_pool:
+        if _is_topic_mismatch(
+            candidate,
+            topics=selection.topics,
+            topic_policy=selection.topic_policy,
+            admission_strictness=selection.admission_strictness,
+        ):
+            removed_for_topic_mismatch += 1
+            continue
+        raw_candidates.append(candidate)
+
+    deduped = _dedupe_candidates(
+        raw_candidates,
+        processing.dedupe_overlap_threshold,
+        topic_focused=topic_focused,
+    )
     if len(deduped) > 1:
         if progress_callback:
             progress_callback(len(windows), len(windows), "global_ranking")
-        deduped, calls = _global_rank_candidates_llm(
-            deduped,
-            selection.style or "",
-            selection.topics,
-            selection.topic_policy,
-        )
-        llm_calls += calls
+        original_scores = {candidate.id: candidate.score for candidate in deduped}
+        try:
+            deduped, calls = _global_rank_candidates_llm(
+                deduped,
+                selection.style or "",
+                selection.topics,
+                selection.topic_policy,
+                llm_client=client,
+            )
+            llm_calls += calls
+        except LLMError as error:
+            llm_calls += error.attempts
+            for candidate in deduped:
+                candidate.score = original_scores[candidate.id]
+            deduped.sort(
+                key=_topic_selection_key if topic_focused else lambda candidate: candidate.score,
+                reverse=True,
+            )
+            message = f"Global ranking unavailable; using discovery scores: {error}"
+            warnings.append(message)
+            logger.warning(message)
 
     selected, removed_for_overlap = _select_non_overlapping(
         deduped,
         max_clips=selection.max_clips,
         allow_overlap_seconds=selection.allow_overlap_seconds,
     )
+    removed_for_limit = max(
+        0,
+        len(deduped) - len(selected) - removed_for_overlap,
+    )
+
+    if selected:
+        if progress_callback:
+            progress_callback(len(windows), len(windows), "enriching_metadata")
+        try:
+            llm_calls += _enrich_selected_clips_llm(
+                selected,
+                episode_title=result_title,
+                language=request.transcript.language,
+                llm_client=client,
+            )
+        except (LLMError, ValueError, TypeError) as error:
+            warnings.append(f"Clip metadata enrichment unavailable: {error}")
+            logger.warning("Clip metadata enrichment failed: %s", error)
+            llm_calls += getattr(error, "attempts", 0)
 
     clips = [_to_clip(candidate, rank=i + 1) for i, candidate in enumerate(selected)]
     return HighlightResult(
         source_id=request.transcript.source_id,
+        title=result_title,
         clips=clips,
         rejected=RejectedStats(
             raw_candidates=len(raw_candidates),
@@ -252,79 +292,142 @@ def identify_highlights(
             removed_for_low_confidence=removed_for_low_confidence,
             removed_for_low_score=removed_for_low_score,
             removed_for_topic_mismatch=removed_for_topic_mismatch,
+            removed_as_duplicate=max(0, len(raw_candidates) - len(deduped)),
+            removed_for_limit=removed_for_limit,
         ),
         processing_summary=ProcessingSummary(
             window_count=len(windows),
             llm_calls=llm_calls,
+            warnings=warnings,
             mode="llm_structured",
-            version="ripe-clips",
+            version=__version__,
+            discovery_window_seconds=discovery_window_seconds,
+            stride_seconds=stride_seconds,
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
+        ),
+    )
+
+
+def _empty_result(
+    request: IdentifyHighlightsRequest,
+    *,
+    result_title: str,
+    discovery_window_seconds: int,
+    stride_seconds: int,
+) -> HighlightResult:
+    return HighlightResult(
+        source_id=request.transcript.source_id,
+        title=result_title,
+        clips=[],
+        rejected=RejectedStats(
+            raw_candidates=0,
+            deduped_candidates=0,
+            removed_for_overlap=0,
+            removed_for_duration=0,
+            removed_for_low_confidence=0,
+            removed_for_low_score=0,
+            removed_for_topic_mismatch=0,
+        ),
+        processing_summary=ProcessingSummary(
+            window_count=0,
+            llm_calls=0,
+            mode="llm_structured",
+            version=__version__,
             discovery_window_seconds=discovery_window_seconds,
             stride_seconds=stride_seconds,
         ),
     )
 
 
-def resolve_window_and_stride(
-    max_clip_duration_seconds: int,
-    discovery_window_seconds: int | None,
-    stride_seconds: int | None,
-) -> tuple[int, int]:
-    window = discovery_window_seconds or _smart_discovery_window(max_clip_duration_seconds)
-    stride = stride_seconds or _smart_stride(window)
-    return window, min(stride, window)
-
-
-def _smart_discovery_window(max_clip_duration_seconds: int) -> int:
-    # Scale the window to the requested clip length so short clips don't pay for
-    # oversized prompts. Floor (10 min) keeps enough narrative context for the
-    # LLM to judge standalone clips; ceiling (30 min) caps prompt size/cost.
-    return max(600, min(int(max_clip_duration_seconds * 1.35), 1800))
-
-
-def _smart_stride(discovery_window_seconds: int) -> int:
-    return max(60, min(600, discovery_window_seconds // 2))
-
-
-def _normalize_rows(rows: list[TranscriptRow]) -> list[TranscriptRow]:
-    cleaned = [row for row in rows if row.text.strip()]
-    return sorted(cleaned, key=lambda row: (row.start_seconds, row.end_seconds))
-
-
-def _build_windows(
-    rows: list[TranscriptRow],
+def _discover_all_windows(
+    windows: list[Window],
     *,
-    window_seconds: int,
-    stride_seconds: int,
-) -> list[Window]:
-    if not rows:
-        return []
+    request: IdentifyHighlightsRequest,
+    llm_client: LLMClient,
+    progress_callback: ProgressCallback | None,
+    warnings: list[str] | None = None,
+) -> tuple[list[list[Candidate]], int]:
+    if not windows:
+        return [], 0
 
-    transcript_start = rows[0].start_seconds
-    transcript_end = max(row.end_seconds for row in rows)
-    windows: list[Window] = []
-    start = transcript_start
-    index = 0
+    failures: list[LLMError] = []
 
-    while start < transcript_end:
-        end = min(start + window_seconds, transcript_end)
-        window_rows = [
-            row for row in rows if row.start_seconds < end and row.end_seconds > start
-        ]
-        if window_rows:
-            windows.append(
-                Window(
-                    id=f"window_{index:04d}",
-                    start=start,
-                    end=end,
-                    rows=window_rows,
-                )
-            )
-            index += 1
-        if end >= transcript_end:
-            break
-        start += stride_seconds
+    def discover_unchecked(window: Window) -> tuple[list[Candidate], int]:
+        return _discover_window_candidates_llm(
+            window,
+            candidates_per_window=request.processing.candidates_per_window,
+            min_duration=request.selection.min_clip_duration_seconds,
+            max_duration=request.selection.max_clip_duration_seconds,
+            style=request.selection.style or "",
+            target=request.selection.target,
+            topics=request.selection.topics,
+            topic_policy=request.selection.topic_policy,
+            admission_strictness=request.selection.admission_strictness,
+            min_candidates_per_window=request.selection.min_candidates_per_window,
+            language=request.transcript.language,
+            llm_client=llm_client,
+        )
 
-    return windows
+    def discover(window: Window) -> tuple[list[Candidate], int]:
+        try:
+            return discover_unchecked(window)
+        except (LLMResponseError, LLMConnectionError, LLMHTTPError) as error:
+            if isinstance(error, LLMHTTPError) and error.status_code != 429 and error.status_code < 500:
+                raise
+            failures.append(error)
+            message = f"Discovery window {window.id} failed; continuing with other windows: {error}"
+            logger.warning(message)
+            if warnings is not None:
+                warnings.append(message)
+            return [], error.attempts
+
+    if llm_client.settings.max_concurrency == 1 or len(windows) == 1:
+        results: list[list[Candidate]] = []
+        calls = 0
+        for index, window in enumerate(windows, 1):
+            candidates, attempts = discover(window)
+            results.append(candidates)
+            calls += attempts
+            if progress_callback:
+                progress_callback(index, len(windows), "identifying")
+        if len(failures) == len(windows):
+            raise failures[0]
+        return results, calls
+
+    ordered_results: list[tuple[list[Candidate], int] | None] = [None] * len(windows)
+    max_workers = min(llm_client.settings.max_concurrency, len(windows))
+    with ThreadPoolExecutor(
+        max_workers=max_workers,
+        thread_name_prefix="highlight-discovery",
+    ) as executor:
+        future_indexes: dict[Future[tuple[list[Candidate], int]], int] = {
+            executor.submit(discover, window): index
+            for index, window in enumerate(windows)
+        }
+        completed = 0
+        try:
+            for future in as_completed(future_indexes):
+                ordered_results[future_indexes[future]] = future.result()
+                completed += 1
+                if progress_callback:
+                    progress_callback(completed, len(windows), "identifying")
+        except Exception:
+            for future in future_indexes:
+                future.cancel()
+            raise
+
+    results = []
+    calls = 0
+    for result in ordered_results:
+        if result is None:  # pragma: no cover - defensive executor boundary
+            raise RuntimeError("Discovery worker did not return a result")
+        candidates, attempts = result
+        results.append(candidates)
+        calls += attempts
+    if len(failures) == len(windows):
+        raise failures[0]
+    return results, calls
 
 
 def _discover_window_candidates_llm(
@@ -340,10 +443,11 @@ def _discover_window_candidates_llm(
     admission_strictness: float,
     min_candidates_per_window: int,
     language: str | None,
+    llm_client: LLMClient | None = None,
 ) -> tuple[list[Candidate], int]:
     if not window.rows:
         return [], 0
-
+    client = llm_client or get_default_llm_client()
     prompt = _build_discovery_prompt(
         window,
         candidates_per_window=candidates_per_window,
@@ -357,76 +461,114 @@ def _discover_window_candidates_llm(
         min_candidates_per_window=min_candidates_per_window,
         language=language,
     )
-    response = call_llm_structured(prompt, DISCOVERY_SCHEMA)
-    data = extract_structured_output(response)
-    row_by_id = {str(row.id): row for row in window.rows}
-    candidates: list[Candidate] = []
-
-    if isinstance(data, dict):
-        for item in data.get("candidates", []):
-            candidate = _candidate_from_llm_item(item, window, row_by_id)
-            if candidate is not None:
-                candidates.append(candidate)
-
-    return sorted(candidates, key=lambda candidate: candidate.score, reverse=True), 1
-
-
-def _candidate_from_llm_item(
-    item: Any,
-    window: Window,
-    row_by_id: dict[str, TranscriptRow],
-) -> Candidate | None:
-    if not isinstance(item, dict):
-        return None
-
-    start_row = row_by_id.get(str(item.get("start_row_id", "")))
-    end_row = row_by_id.get(str(item.get("end_row_id", "")))
-    if start_row is None or end_row is None:
-        return None
-    if end_row.end_seconds <= start_row.start_seconds:
-        return None
-
-    start_index = window.rows.index(start_row)
-    end_index = window.rows.index(end_row)
-    if end_index < start_index:
-        return None
-
-    rows = window.rows[start_index : end_index + 1]
-    if not rows:
-        return None
-
-    interestingness = _clamp(_float(item.get("interestingness")))
-    self_contained = _clamp(_float(item.get("self_contained")))
-    boundary_quality = _clamp(_float(item.get("boundary_quality")))
-    topic_relevance = _clamp(_float(item.get("topic_relevance")))
-    overall = _clamp(_float(item.get("overall")))
-    start_anchor = str(item.get("start_anchor", "")).strip()
-    end_anchor = str(item.get("end_anchor", "")).strip()
-    recovery_confidence = _anchor_confidence(rows, start_anchor, end_anchor)
-    score = _clamp(overall * 0.7 + recovery_confidence * 0.3)
-    candidate_id = _candidate_id(window.id, start_row.id, end_row.id)
-
-    return Candidate(
-        id=candidate_id,
-        start=start_row.start_seconds,
-        end=end_row.end_seconds,
-        start_row=start_row,
-        end_row=end_row,
-        rows=rows,
-        score=score,
-        interestingness=interestingness,
-        self_contained=self_contained,
-        boundary_quality=boundary_quality,
-        topic_relevance=topic_relevance,
-        recovery_confidence=recovery_confidence,
-        title=str(item.get("title", "")).strip(),
-        summary=str(item.get("summary", "")).strip(),
-        reason=str(item.get("reason", "")).strip(),
-        start_anchor=start_anchor,
-        end_anchor=end_anchor,
-        window_ids={window.id},
-        candidate_ids={candidate_id},
+    result = client.call_structured(
+        prompt,
+        DiscoveryResponse,
+        schema_name="highlight_discovery",
     )
+    row_by_id = {str(row.id): row for row in window.rows}
+    candidates = [
+        candidate
+        for item in result.output.candidates
+        if (candidate := _candidate_from_llm_item(item, window, row_by_id))
+        is not None
+    ]
+    return (
+        sorted(candidates, key=lambda candidate: candidate.score, reverse=True),
+        result.attempts,
+    )
+
+
+def _verify_topic_candidates_llm(
+    candidates: list[Candidate],
+    topics: list[str],
+    *,
+    llm_client: LLMClient,
+) -> int:
+    batches = _partition_candidates_for_prompt(
+        candidates,
+        max_items=llm_client.settings.ranking_batch_size,
+        max_prompt_chars=llm_client.settings.max_prompt_chars,
+        prompt_builder=lambda batch: _build_topic_verification_prompt(batch, topics),
+    )
+    calls = 0
+    for batch in batches:
+        result = llm_client.call_structured(
+            _build_topic_verification_prompt(batch, topics),
+            TopicVerificationResponse,
+            schema_name="topic_verification",
+            system_prompt=(
+                "You are a conservative topic-relevance auditor. Classify a clip "
+                "as direct or related only when its transcript provides clear, "
+                "verbatim evidence. When uncertain, classify it as unrelated. "
+                "Respond only with JSON matching the provided schema."
+            ),
+        )
+        calls += result.attempts
+        _apply_topic_verification(batch, result.output)
+    return calls
+
+
+def _apply_topic_verification(
+    candidates: list[Candidate],
+    response: TopicVerificationResponse,
+) -> None:
+    by_id = {candidate.id: candidate for candidate in candidates}
+    seen: set[str] = set()
+
+    for item in response.candidates:
+        candidate = by_id.get(item.candidate_id)
+        if candidate is None or candidate.id in seen:
+            continue
+        seen.add(candidate.id)
+
+        evidence = item.evidence_quote.strip()
+        evidence_is_valid = (
+            item.match == "unrelated"
+            or _topic_evidence_matches(candidate, evidence)
+        )
+        candidate.topic_verification_confidence = item.confidence
+        candidate.topic_verification_reason = item.reason.strip()
+
+        if item.match in {"direct", "related"} and evidence_is_valid:
+            candidate.topic_match = item.match
+            candidate.topic_evidence = evidence
+            candidate.topic_relevance = _verified_topic_relevance(
+                item.match,
+                item.confidence,
+            )
+        else:
+            candidate.topic_match = "unrelated"
+            candidate.topic_evidence = ""
+            candidate.topic_relevance = 0.0
+            if item.match != "unrelated" and not evidence_is_valid:
+                candidate.topic_verification_reason = (
+                    "The verifier did not provide a verbatim evidence quote. "
+                    f"{candidate.topic_verification_reason}"
+                ).strip()
+
+    for candidate in candidates:
+        if candidate.id in seen:
+            continue
+        candidate.topic_match = "unverified"
+        candidate.topic_relevance = 0.0
+        candidate.topic_verification_reason = (
+            "The topic verifier omitted this candidate."
+        )
+
+
+def _topic_evidence_matches(candidate: Candidate, evidence: str) -> bool:
+    normalized_evidence = _norm(evidence)
+    transcript = _norm(" ".join(row.text for row in candidate.rows))
+    return bool(normalized_evidence) and normalized_evidence in transcript
+
+
+def _verified_topic_relevance(match: str, confidence: float) -> float:
+    if match == "direct":
+        return _clamp(0.8 + confidence * 0.2)
+    if match == "related":
+        return _clamp(0.6 + confidence * 0.2)
+    return 0.0
 
 
 def _global_rank_candidates_llm(
@@ -434,359 +576,361 @@ def _global_rank_candidates_llm(
     style: str,
     topics: list[str],
     topic_policy: str,
+    *,
+    llm_client: LLMClient | None = None,
 ) -> tuple[list[Candidate], int]:
-    by_id = {candidate.id: candidate for candidate in candidates}
-    response = call_llm_structured(
-        _build_global_rank_prompt(candidates, style, topics, topic_policy),
-        GLOBAL_RANK_SCHEMA,
+    client = llm_client or get_default_llm_client()
+    ranked, calls = _rank_candidate_groups(
+        candidates,
+        style=style,
+        topics=topics,
+        topic_policy=topic_policy,
+        llm_client=client,
     )
-    data = extract_structured_output(response)
-    ranked_items = data.get("ranked_candidates", []) if isinstance(data, dict) else []
+    if _topic_filter_enabled(topics=topics, topic_policy=topic_policy):
+        ranked.sort(key=_topic_selection_key, reverse=True)
+    return ranked, calls
 
+
+def _rank_candidate_groups(
+    candidates: list[Candidate],
+    *,
+    style: str,
+    topics: list[str],
+    topic_policy: str,
+    llm_client: LLMClient,
+) -> tuple[list[Candidate], int]:
+    if len(candidates) <= 1:
+        return candidates, 0
+    batches = _partition_candidates_for_prompt(
+        candidates,
+        max_items=llm_client.settings.ranking_batch_size,
+        max_prompt_chars=llm_client.settings.max_prompt_chars,
+        prompt_builder=lambda batch: _build_global_rank_prompt(
+            batch,
+            style,
+            topics,
+            topic_policy,
+        ),
+    )
+    ranked_groups: list[list[Candidate]] = []
+    calls = 0
+    for batch in batches:
+        ranked, attempts = _rank_candidate_batch(
+            batch,
+            style=style,
+            topics=topics,
+            topic_policy=topic_policy,
+            llm_client=llm_client,
+        )
+        ranked_groups.append(ranked)
+        calls += attempts
+
+    if len(ranked_groups) == 1:
+        return ranked_groups[0], calls
+
+    leaders = [group[0] for group in ranked_groups if group]
+    ordered_leaders, leader_calls = _rank_candidate_groups(
+        leaders,
+        style=style,
+        topics=topics,
+        topic_policy=topic_policy,
+        llm_client=llm_client,
+    )
+    calls += leader_calls
+    group_by_leader = {group[0].id: group for group in ranked_groups if group}
+    ordered: list[Candidate] = []
+    for leader in ordered_leaders:
+        ordered.extend(group_by_leader[leader.id])
+    return ordered, calls
+
+
+def _rank_candidate_batch(
+    candidates: list[Candidate],
+    *,
+    style: str,
+    topics: list[str],
+    topic_policy: str,
+    llm_client: LLMClient,
+) -> tuple[list[Candidate], int]:
+    if len(candidates) <= 1:
+        return candidates, 0
+    result = llm_client.call_structured(
+        _build_global_rank_prompt(candidates, style, topics, topic_policy),
+        GlobalRankResponse,
+        schema_name="global_candidate_ranking",
+    )
+    by_id = {candidate.id: candidate for candidate in candidates}
     ranked: list[Candidate] = []
     seen: set[str] = set()
-    for item in ranked_items:
-        if not isinstance(item, dict):
-            continue
-        candidate_id = str(item.get("candidate_id", ""))
-        candidate = by_id.get(str(candidate_id))
+    for item in result.output.ranked_candidates:
+        candidate = by_id.get(item.candidate_id)
         if candidate is None or candidate.id in seen:
             continue
-        global_score = _clamp(_float(item.get("global_score")))
-        rank_reason = str(item.get("rank_reason", "")).strip()
         candidate.score = _calibrated_final_score(
-            global_score=global_score,
+            global_score=item.global_score,
             local_score=candidate.score,
             recovery_confidence=candidate.recovery_confidence,
             rank=len(ranked) + 1,
             total=len(candidates),
+            topic_relevance=candidate.topic_relevance,
+            topic_focused=_topic_filter_enabled(
+                topics=topics,
+                topic_policy=topic_policy,
+            ),
         )
+        rank_reason = item.rank_reason.strip()
         if rank_reason:
-            candidate.reason = f"{candidate.reason} Global ranking: {rank_reason}".strip()
+            candidate.reason = (
+                f"{candidate.reason} Global ranking: {rank_reason}".strip()
+            )
         ranked.append(candidate)
         seen.add(candidate.id)
 
-    for candidate in candidates:
-        if candidate.id not in seen:
-            ranked.append(candidate)
-
-    return ranked, 1
+    ranked.extend(candidate for candidate in candidates if candidate.id not in seen)
+    return ranked, result.attempts
 
 
-def _build_discovery_prompt(
-    window: Window,
+def _enrich_selected_clips_llm(
+    candidates: list[Candidate],
     *,
-    candidates_per_window: int,
-    min_duration: int,
-    max_duration: int,
-    style: str,
-    target: str,
-    topics: list[str],
-    topic_policy: str,
-    admission_strictness: float,
-    min_candidates_per_window: int,
+    episode_title: str,
     language: str | None,
-) -> str:
-    transcript = "\n".join(
-        f"[{row.id}] {format_seconds(row.start_seconds)} - "
-        f"{format_seconds(row.end_seconds)}"
-        f"{f' {row.speaker}:' if row.speaker else ''} {row.text}"
-        for row in window.rows
+    llm_client: LLMClient | None = None,
+) -> int:
+    client = llm_client or get_default_llm_client()
+    batches = _partition_candidates_for_prompt(
+        candidates,
+        max_items=client.settings.metadata_batch_size,
+        max_prompt_chars=client.settings.max_prompt_chars,
+        prompt_builder=lambda batch: _build_clip_metadata_prompt(
+            batch,
+            episode_title,
+            language,
+        ),
     )
-    topic_text = ", ".join(topics) if topics else "none"
-    topic_rule = _topic_policy_rule(topics, topic_policy)
-    coverage_rule = (
-        f"- Try to return at least {min_candidates_per_window} usable candidate(s) from this window. "
-        "If none meet the admission score, return the best valid fallback(s) and score them honestly."
-        if min_candidates_per_window > 0
-        else "- If this window has no candidate that satisfies the topic policy and admission score, return an empty candidates array."
-    )
-
-    return f"""You are selecting highlight clips from a podcast transcript.
-
-Return up to {candidates_per_window} strong candidate clips from this window.
-You may return fewer than {candidates_per_window}, including zero.
-
-Selection target: {target}
-Preferred style: {style or "interesting, self-contained, compelling"}
-Focus topics: {topic_text}
-Topic policy: {topic_policy}
-Minimum admission score: {admission_strictness:.2f}
-Transcript language: {language or "unknown"}
-
-Rules:
-- Candidate duration must be between {min_duration} and {max_duration} seconds.
-- Choose self-contained spans with clear setup and payoff.
-- Prefer surprising, emotionally engaging, insightful, funny, useful, or high-stakes moments.
-{topic_rule}
-- topic_relevance is 0.00 for unrelated clips and 1.00 for clips directly centered on the focus topics.
-- Except for fallback coverage, only return candidates whose overall score is at least {admission_strictness:.2f}.
-{coverage_rule}
-- Use only row IDs that appear in this transcript window.
-- start_row_id and end_row_id are inclusive row IDs.
-- Do not invent timestamps or text.
-- Anchors must be short verbatim quotes from near the selected start/end rows.
-- Scores must be numbers from 0 to 1 and calibrated strictly:
-  - 0.95-1.00: rare, exceptional even compared with a full episode
-  - 0.90-0.94: excellent and highly shareable
-  - 0.80-0.89: strong candidate
-  - 0.70-0.79: usable but imperfect
-  - below 0.70: weak or context-dependent
-- Do not give every good clip a score above 0.90. Reserve high scores.
-- Return JSON matching the provided schema exactly.
-
-Transcript window {window.id}, {format_seconds(window.start)}-{format_seconds(window.end)}:
-{transcript}
-"""
+    calls = 0
+    pending = deque(batches)
+    while pending:
+        batch = pending.popleft()
+        try:
+            calls += _enrich_metadata_batch(
+                batch,
+                episode_title=episode_title,
+                language=language,
+                llm_client=client,
+            )
+        except LLMError as error:
+            calls += getattr(error, "attempts", 0)
+            logger.warning(
+                "Clip metadata batch failed candidate_ids=%s: %s",
+                [candidate.id for candidate in batch],
+                error,
+            )
+            # Smaller outputs can recover from truncation or invalid structured
+            # responses. Each batch splits at most down to single candidates;
+            # transport/provider failures already have client-level retries.
+            if isinstance(error, LLMResponseError) and len(batch) > 1:
+                midpoint = len(batch) // 2
+                logger.info("Retrying clip metadata in smaller batches")
+                pending.appendleft(batch[midpoint:])
+                pending.appendleft(batch[:midpoint])
+    return calls
 
 
-def _build_global_rank_prompt(
-    candidates: list[Candidate],
-    style: str,
-    topics: list[str],
-    topic_policy: str,
-) -> str:
-    blocks = []
-    for candidate in candidates:
-        excerpt = _clip_excerpt(candidate.rows)
-        blocks.append(
-            f"candidate_id: {candidate.id}\n"
-            f"time: {format_seconds(candidate.start)}-{format_seconds(candidate.end)}\n"
-            f"duration_seconds: {candidate.duration:.1f}\n"
-            f"title: {candidate.title}\n"
-            f"summary: {candidate.summary}\n"
-            f"reason: {candidate.reason}\n"
-            f"local_score: {candidate.score:.3f}\n"
-            f"topic_relevance: {candidate.topic_relevance:.3f}\n"
-            f"excerpt: {excerpt}"
-        )
-
-    topic_text = ", ".join(topics) if topics else "none"
-
-    return f"""Rank these recovered podcast highlight candidates from best to worst.
-
-Preferred style: {style or "interesting, self-contained, compelling"}
-Focus topics: {topic_text}
-Topic policy: {topic_policy}
-
-Rules:
-- Include every candidate_id exactly once.
-- Prefer clips with strong standalone value, clear setup/payoff, and memorable content.
-- Apply the topic policy when ordering candidates.
-- Calibrate global_score across the whole candidate set, not just within one topic.
-- Use the full 0.00-1.00 range honestly:
-  - 0.95-1.00: rare, episode-defining, likely top 1-2 clips only
-  - 0.90-0.94: excellent, clearly worth clipping
-  - 0.80-0.89: strong but not elite
-  - 0.70-0.79: usable but has flaws
-  - below 0.70: weak, context-dependent, or redundant
-- Avoid tied scores unless two candidates are genuinely indistinguishable.
-- Return JSON matching the provided schema exactly.
-
-Candidates:
-{"\n\n---\n\n".join(blocks)}
-"""
-
-
-def _dedupe_candidates(candidates: list[Candidate], threshold: float) -> list[Candidate]:
-    ordered = sorted(candidates, key=lambda candidate: candidate.score, reverse=True)
-    deduped: list[Candidate] = []
-
-    for candidate in ordered:
-        duplicate = next(
-            (
-                existing
-                for existing in deduped
-                if _overlap_ratio(candidate, existing) >= threshold
-            ),
-            None,
-        )
-        if duplicate is None:
-            deduped.append(candidate)
-            continue
-
-        duplicate.window_ids.update(candidate.window_ids)
-        duplicate.candidate_ids.update(candidate.candidate_ids)
-
-    return sorted(deduped, key=lambda candidate: candidate.score, reverse=True)
-
-
-def _topic_policy_rule(topics: list[str], topic_policy: str) -> str:
-    if not topics:
-        return "- No focus topics were provided; judge candidates by standalone highlight quality."
-    if topic_policy == "only":
-        return (
-            "- Candidates must be directly centered on one or more focus topics. "
-            "If no such candidate exists, return an empty candidates array."
-        )
-    if topic_policy == "hard":
-        return (
-            "- Candidates should substantially address one or more focus topics. "
-            "Reject loosely related or merely adjacent moments."
-        )
-    return (
-        "- Prefer candidates about one or more focus topics, but allow exceptional off-topic "
-        "clips when they are clearly stronger."
-    )
-
-
-def _is_topic_mismatch(
-    candidate: Candidate,
-    *,
-    topics: list[str],
-    topic_policy: str,
-    admission_strictness: float,
-) -> bool:
-    if not topics or topic_policy == "soft":
-        return False
-    if topic_policy == "only":
-        threshold = max(0.85, admission_strictness)
-    else:
-        threshold = max(0.6, admission_strictness * 0.75)
-    return candidate.topic_relevance < threshold
-
-
-def _select_non_overlapping(
+def _enrich_metadata_batch(
     candidates: list[Candidate],
     *,
-    max_clips: int | None,
-    allow_overlap_seconds: int,
-) -> tuple[list[Candidate], int]:
-    selected: list[Candidate] = []
-    removed_for_overlap = 0
-
-    for candidate in candidates:
-        if max_clips is not None and len(selected) >= max_clips:
-            break
-        if any(_overlap_seconds(candidate, kept) > allow_overlap_seconds for kept in selected):
-            removed_for_overlap += 1
+    episode_title: str,
+    language: str | None,
+    llm_client: LLMClient,
+) -> int:
+    result = llm_client.call_structured(
+        _build_clip_metadata_prompt(candidates, episode_title, language),
+        ClipMetadataResponse,
+        schema_name="clip_metadata",
+    )
+    calls = result.attempts
+    by_id = {candidate.id: candidate for candidate in candidates}
+    retry_candidates: list[Candidate] = []
+    for item in result.output.clips:
+        candidate = by_id.get(item.candidate_id)
+        if candidate is None:
             continue
-        selected.append(candidate)
+        payload = item.model_dump()
+        _apply_clip_metadata(candidate, payload)
+        if _metadata_exceeds_word_limit(payload):
+            retry_candidates.append(candidate)
 
-    return selected, removed_for_overlap
+    if not retry_candidates:
+        return calls
 
-
-def _to_clip(candidate: Candidate, *, rank: int) -> HighlightClip:
-    return HighlightClip(
-        clip_id=f"clip_{rank:03d}",
-        rank=rank,
-        start_seconds=round(candidate.start, 3),
-        end_seconds=round(candidate.end, 3),
-        duration_seconds=round(candidate.duration, 3),
-        start_row_id=candidate.start_row.id,
-        end_row_id=candidate.end_row.id,
-        title=candidate.title or _title_from_rows(candidate.rows),
-        summary=candidate.summary
-        or f"Candidate span from transcript rows {candidate.start_row.id} through {candidate.end_row.id}.",
-        reason=candidate.reason
-        or "Selected by structured LLM discovery, recovery validation, and non-overlap constraints.",
-        scores=ScoreBreakdown(
-            overall=round(candidate.score, 4),
-            interestingness=round(candidate.interestingness, 4),
-            self_contained=round(candidate.self_contained, 4),
-            boundary_quality=round(candidate.boundary_quality, 4),
-            topic_relevance=round(candidate.topic_relevance, 4),
-            recovery_confidence=round(candidate.recovery_confidence, 4),
-        ),
-        anchors=Anchors(
-            start=candidate.start_anchor or _anchor(candidate.start_row.text),
-            end=candidate.end_anchor or _anchor(candidate.end_row.text),
-        ),
-        source=ClipSource(
-            window_ids=sorted(candidate.window_ids),
-            candidate_ids=sorted(candidate.candidate_ids),
-        ),
-    )
-
-
-def _anchor_confidence(rows: list[TranscriptRow], start_anchor: str, end_anchor: str) -> float:
-    text = _norm(" ".join(row.text for row in rows))
-    start_ok = bool(start_anchor.strip()) and _norm(start_anchor) in text
-    end_ok = bool(end_anchor.strip()) and _norm(end_anchor) in text
-    if start_ok and end_ok:
-        return 1.0
-    if start_ok or end_ok:
-        return 0.75
-    return 0.55
-
-
-def _calibrated_final_score(
-    *,
-    global_score: float,
-    local_score: float,
-    recovery_confidence: float,
-    rank: int,
-    total: int,
-) -> float:
-    if total <= 1:
-        rank_prior = 0.85
-    else:
-        rank_prior = 0.68 + 0.24 * (1 - ((rank - 1) / (total - 1)))
-    return _clamp(
-        global_score * 0.72
-        + local_score * 0.13
-        + recovery_confidence * 0.08
-        + rank_prior * 0.07
-    )
-
-
-def _candidate_id(window_id: str, start_id: object, end_id: object) -> str:
-    raw = f"{window_id}:{start_id}:{end_id}".encode("utf-8")
-    digest = hashlib.sha1(raw).hexdigest()[:8]
-    return f"cand_{digest}"
-
-
-def _title_from_rows(rows: list[TranscriptRow]) -> str:
-    words = _words(" ".join(row.text for row in rows))
-    if not words:
-        return "Untitled Highlight"
-    return " ".join(words[:10])[:80]
-
-
-def _clip_excerpt(rows: list[TranscriptRow], max_chars: int = 900) -> str:
-    text = " ".join(row.text.strip() for row in rows)
-    text = re.sub(r"\s+", " ", text).strip()
-    if len(text) <= max_chars:
-        return text
-    return f"{text[:max_chars].rstrip()}..."
-
-
-def _anchor(text: str) -> str:
-    words = _words(text)
-    return " ".join(words[:16])
-
-
-def _words(text: str) -> list[str]:
-    return re.findall(r"[\w']+", text, flags=re.UNICODE)
-
-
-def _norm(text: str) -> str:
-    return re.sub(r"\s+", " ", re.sub(r"[^\w\s']", " ", text.lower())).strip()
-
-
-def _float(value: Any) -> float:
     try:
-        return float(value)
-    except (TypeError, ValueError):
-        return 0.0
+        retry_result = llm_client.call_structured(
+            _build_clip_metadata_prompt(
+                retry_candidates,
+                episode_title,
+                language,
+                word_limit_retry=True,
+            ),
+            ClipMetadataResponse,
+            schema_name="clip_metadata_word_limit_retry",
+        )
+        calls += retry_result.attempts
+        retry_by_id = {candidate.id: candidate for candidate in retry_candidates}
+        for item in retry_result.output.clips:
+            payload = item.model_dump()
+            if _metadata_exceeds_word_limit(payload):
+                continue
+            candidate = retry_by_id.get(item.candidate_id)
+            if candidate is not None:
+                _apply_clip_metadata(candidate, payload)
+    except LLMError as error:
+        calls += getattr(error, "attempts", 0)
+        logger.warning("Clip metadata word-limit retry failed: %s", error)
+    return calls
 
 
-def _overlap_seconds(left: Candidate, right: Candidate) -> float:
-    return max(0.0, min(left.end, right.end) - max(left.start, right.start))
+def generate_clip_metadata(
+    transcript: Transcript,
+    *,
+    llm_client: LLMClient | None = None,
+) -> ClipMetadataResult:
+    """Write publishing metadata for a transcript that is already one clip.
+
+    Skips discovery and ranking: the whole transcript becomes a single
+    candidate and goes through the same metadata prompt, word-limit retry,
+    and fallbacks as clips selected by ``identify_highlights``.
+    """
+    rows = _normalize_rows(transcript.rows)
+    if not rows:
+        raise ValueError("Transcript has no caption rows")
+    supplied_title = (transcript.title or "").strip()
+    title = supplied_title or transcript.source_id
+    candidate = Candidate(
+        id="clip_001",
+        start=rows[0].start_seconds,
+        end=max(row.end_seconds for row in rows),
+        start_row=rows[0],
+        end_row=rows[-1],
+        rows=rows,
+        score=0.0,
+        interestingness=0.0,
+        shareability=0.0,
+        self_contained=0.0,
+        boundary_quality=0.0,
+        topic_relevance=0.0,
+        recovery_confidence=0.0,
+        title=supplied_title,
+    )
+    client = llm_client or get_default_llm_client()
+    prompt_budget = max(1, client.settings.max_prompt_chars - 512)
+    if len(_build_clip_metadata_prompt([candidate], title, transcript.language)) > prompt_budget:
+        raise LLMPromptTooLargeError(
+            "Transcript cannot fit within the configured "
+            f"{client.settings.max_prompt_chars:,}-character prompt limit"
+        )
+    llm_calls = _enrich_metadata_batch(
+        [candidate],
+        episode_title=title,
+        language=transcript.language,
+        llm_client=client,
+    )
+    return ClipMetadataResult(
+        source_id=transcript.source_id,
+        title=title,
+        clip=_to_clip(candidate, rank=1),
+        llm_calls=llm_calls,
+    )
 
 
-def _overlap_ratio(left: Candidate, right: Candidate) -> float:
-    overlap = _overlap_seconds(left, right)
-    shorter = max(0.001, min(left.duration, right.duration))
-    return overlap / shorter
+def _partition_candidates_for_prompt(
+    candidates: list[Candidate],
+    *,
+    max_items: int,
+    max_prompt_chars: int,
+    prompt_builder: Callable[[list[Candidate]], str],
+) -> list[list[Candidate]]:
+    if not candidates:
+        return []
+    batches: list[list[Candidate]] = []
+    current: list[Candidate] = []
+    prompt_budget = max(1, max_prompt_chars - 512)
+
+    for candidate in candidates:
+        trial = [*current, candidate]
+        too_many = len(trial) > max_items
+        too_large = len(prompt_builder(trial)) > prompt_budget
+        if current and (too_many or too_large):
+            batches.append(current)
+            current = [candidate]
+        else:
+            current = trial
+
+        if len(prompt_builder(current)) > prompt_budget:
+            raise LLMPromptTooLargeError(
+                f"Candidate {candidate.id} cannot fit within the configured "
+                f"{max_prompt_chars:,}-character prompt limit"
+            )
+
+    if current:
+        batches.append(current)
+    return batches
 
 
-def _clamp(value: float, lower: float = 0.0, upper: float = 1.0) -> float:
-    return max(lower, min(upper, value))
-
-
-def format_seconds(value: float) -> str:
-    total = int(value)
-    hours, remainder = divmod(total, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+__all__ = [
+    "Candidate",
+    "CLIP_METADATA_SCHEMA",
+    "DISCOVERY_SCHEMA",
+    "GLOBAL_RANK_SCHEMA",
+    "TOPIC_VERIFICATION_SCHEMA",
+    "MAX_QUESTION_CHARS",
+    "MAX_QUESTION_WORDS",
+    "Window",
+    "_anchor",
+    "_anchor_confidence",
+    "_apply_clip_metadata",
+    "_apply_topic_verification",
+    "_build_clip_metadata_prompt",
+    "_build_discovery_prompt",
+    "_build_global_rank_prompt",
+    "_build_topic_verification_prompt",
+    "_build_windows",
+    "_calibrated_final_score",
+    "_candidate_from_llm_item",
+    "_candidate_id",
+    "_category_from_llm_item",
+    "_clamp",
+    "_clip_excerpt",
+    "_dedupe_candidates",
+    "_fallback_hashtags",
+    "_fallback_quotes",
+    "_float",
+    "_format_description",
+    "_global_rank_candidates_llm",
+    "_is_topic_mismatch",
+    "_limit_words",
+    "_metadata_exceeds_word_limit",
+    "_norm",
+    "_normalize_csv",
+    "_normalize_rows",
+    "_overlap_ratio",
+    "_overlap_seconds",
+    "_question_exceeds_limits",
+    "_select_non_overlapping",
+    "_smart_discovery_window",
+    "_smart_stride",
+    "_title_from_rows",
+    "_to_clip",
+    "_topic_evidence_matches",
+    "_topic_policy_rule",
+    "_unique_strings",
+    "_words",
+    "format_seconds",
+    "generate_clip_metadata",
+    "identify_highlights",
+    "plan_highlight_windows",
+    "resolve_window_and_stride",
+    "_verified_topic_relevance",
+    "_verify_topic_candidates_llm",
+]

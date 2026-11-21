@@ -8,7 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Nothing yet.
+- Highlightr transcript-row-based highlight selection, publishing metadata,
+  and a metadata-only endpoint for clips supplied as SRT files.
+- Bounded, expiring in-memory Highlightr jobs with progress polling and
+  configurable LLM retries, timeouts, and concurrency limits.
+- Parakeet upload size limits and service regression coverage.
+
+### Changed
+- Pin the bundled service images to `joonfjp/highlightr:1.0.0` and
+  `joonfjp/parakeet:1.0.0` and refresh service deployment documentation.
+- Isolate Parakeet audio processing from the API event loop and guard
+  concurrent model loading.
+
+### Fixed
+- Parakeet audio chunking after forced cuts, preserving subsequent speech
+  without adding a spurious trailing chunk.
+
+### Removed
+- Legacy Parakeet monolithic server, HTML interface, helper scripts, and
+  separate GPU Dockerfile.
 
 ## [0.1.0] - 2026-07-15
 
